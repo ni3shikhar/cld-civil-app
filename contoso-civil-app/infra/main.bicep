@@ -20,13 +20,16 @@ param sqlAdminPassword string
 param jwtSecret string
 
 // Variables
-var prefix = 'contoso-civil'
+var prefix = 'civil'  // Shortened to fit 32-char limit for container apps
 var uniqueSuffix = uniqueString(resourceGroup().id)
-var acrName = replace('${prefix}acr${uniqueSuffix}', '-', '')
-var sqlServerName = '${prefix}-sql-${environment}-${uniqueSuffix}'
+var acrName = replace('contosocivilacr${uniqueSuffix}', '-', '')
+var sqlServerName = 'contoso-civil-sql-${environment}-${uniqueSuffix}'
 var sqlDatabaseName = 'ContosoCivilApp'
-var containerAppsEnvName = '${prefix}-env-${environment}'
-var logAnalyticsName = '${prefix}-logs-${environment}'
+var containerAppsEnvName = 'contoso-civil-env-${environment}'
+var logAnalyticsName = 'contoso-civil-logs-${environment}'
+
+// Use placeholder image for initial deployment (before CI/CD pushes real images)
+var placeholderImage = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
 
 // Log Analytics Workspace for Container Apps
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
@@ -147,7 +150,7 @@ resource userService 'Microsoft.App/containerApps@2023-05-01' = {
       containers: [
         {
           name: 'user-service'
-          image: '${containerRegistry.properties.loginServer}/user-service:latest'
+          image: placeholderImage  // Update via CI/CD after build
           resources: {
             cpu: json('0.25')
             memory: '0.5Gi'
@@ -201,7 +204,7 @@ resource jobService 'Microsoft.App/containerApps@2023-05-01' = {
       containers: [
         {
           name: 'job-service'
-          image: '${containerRegistry.properties.loginServer}/job-service:latest'
+          image: placeholderImage  // Update via CI/CD after build
           resources: {
             cpu: json('0.25')
             memory: '0.5Gi'
@@ -254,7 +257,7 @@ resource interviewService 'Microsoft.App/containerApps@2023-05-01' = {
       containers: [
         {
           name: 'interview-service'
-          image: '${containerRegistry.properties.loginServer}/interview-service:latest'
+          image: placeholderImage  // Update via CI/CD after build
           resources: {
             cpu: json('0.25')
             memory: '0.5Gi'
@@ -275,7 +278,7 @@ resource interviewService 'Microsoft.App/containerApps@2023-05-01' = {
 
 // Application Service Container App
 resource applicationService 'Microsoft.App/containerApps@2023-05-01' = {
-  name: '${prefix}-application-service'
+  name: '${prefix}-app-svc'
   location: location
   properties: {
     managedEnvironmentId: containerAppsEnvironment.id
@@ -306,8 +309,8 @@ resource applicationService 'Microsoft.App/containerApps@2023-05-01' = {
     template: {
       containers: [
         {
-          name: 'application-service'
-          image: '${containerRegistry.properties.loginServer}/application-service:latest'
+          name: 'app-service'
+          image: placeholderImage  // Update via CI/CD after build
           resources: {
             cpu: json('0.25')
             memory: '0.5Gi'
@@ -365,7 +368,7 @@ resource apiGateway 'Microsoft.App/containerApps@2023-05-01' = {
       containers: [
         {
           name: 'api-gateway'
-          image: '${containerRegistry.properties.loginServer}/api-gateway:latest'
+          image: placeholderImage  // Update via CI/CD after build
           resources: {
             cpu: json('0.5')
             memory: '1Gi'
@@ -375,7 +378,7 @@ resource apiGateway 'Microsoft.App/containerApps@2023-05-01' = {
             { name: 'USER_SERVICE_URL', value: 'http://${prefix}-user-service' }
             { name: 'JOB_SERVICE_URL', value: 'http://${prefix}-job-service' }
             { name: 'INTERVIEW_SERVICE_URL', value: 'http://${prefix}-interview-service' }
-            { name: 'APPLICATION_SERVICE_URL', value: 'http://${prefix}-application-service' }
+            { name: 'APPLICATION_SERVICE_URL', value: 'http://${prefix}-app-svc' }
             { name: 'JWT_SECRET', secretRef: 'jwt-secret' }
           ]
         }
@@ -424,7 +427,7 @@ resource frontend 'Microsoft.App/containerApps@2023-05-01' = {
       containers: [
         {
           name: 'frontend'
-          image: '${containerRegistry.properties.loginServer}/frontend:latest'
+          image: placeholderImage  // Update via CI/CD after build
           resources: {
             cpu: json('0.25')
             memory: '0.5Gi'
