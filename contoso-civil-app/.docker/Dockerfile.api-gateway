@@ -1,0 +1,21 @@
+# Dockerfile for API Gateway
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy package files from the root and api-gateway
+COPY package*.json ./
+COPY backend/api-gateway/package*.json ./backend/api-gateway/
+
+# Install dependencies
+RUN npm install --prefix ./backend/api-gateway
+
+# Copy application code
+COPY backend/api-gateway ./backend/api-gateway
+
+# Build TypeScript
+RUN npm run build --prefix ./backend/api-gateway
+
+EXPOSE 3000
+
+CMD ["npm", "start", "--prefix", "./backend/api-gateway"]

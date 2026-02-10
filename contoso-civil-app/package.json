@@ -1,0 +1,31 @@
+{
+  "name": "contoso-civil-app",
+  "version": "1.0.0",
+  "description": "Three-tier microservice-based civil engineering job management platform",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace=backend/api-gateway\" \"npm run dev --workspace=backend/services/user-service\" \"npm run dev --workspace=backend/services/job-service\" \"npm run dev --workspace=backend/services/interview-service\" \"npm run dev --workspace=backend/services/application-service\" \"npm run dev --workspace=frontend\"",
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces",
+    "docker:build": "docker-compose -f .docker/docker-compose.yml build",
+    "docker:up": "docker-compose -f .docker/docker-compose.yml up -d",
+    "docker:down": "docker-compose -f .docker/docker-compose.yml down",
+    "docker:logs": "docker-compose -f .docker/docker-compose.yml logs -f",
+    "lint": "npm run lint --workspaces"
+  },
+  "workspaces": [
+    "frontend",
+    "backend/api-gateway",
+    "backend/services/user-service",
+    "backend/services/job-service",
+    "backend/services/interview-service",
+    "backend/services/application-service"
+  ],
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}

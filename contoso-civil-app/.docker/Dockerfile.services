@@ -1,0 +1,27 @@
+# Dockerfile for Microservices
+FROM node:18-alpine
+
+ARG SERVICE_PATH=backend/services/user-service
+ENV SERVICE_PATH=${SERVICE_PATH}
+
+WORKDIR /app
+
+# Copy root package files
+COPY package*.json ./
+
+# Copy service package files
+COPY ${SERVICE_PATH}/package*.json ./${SERVICE_PATH}/
+
+# Install dependencies
+RUN npm install --prefix ./${SERVICE_PATH}
+
+# Copy application code
+COPY ${SERVICE_PATH} ./${SERVICE_PATH}
+
+# Build TypeScript
+RUN npm run build --prefix ./${SERVICE_PATH}
+
+# Expose dynamic port (passed via docker-compose)
+EXPOSE 3001 3002 3003 3004
+
+CMD npm start --prefix ./${SERVICE_PATH}

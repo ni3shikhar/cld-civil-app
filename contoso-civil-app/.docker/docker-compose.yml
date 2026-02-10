@@ -1,0 +1,161 @@
+services:
+  # SQL Server Database
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      SA_PASSWORD: "YourSQLPassword123!"
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: "Developer"
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'YourSQLPassword123!' -C -Q 'SELECT 1' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - contoso-network
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ..
+      dockerfile: .docker/Dockerfile.api-gateway
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      API_GATEWAY_PORT: 3000
+      USER_SERVICE_URL: http://user-service:3001
+      JOB_SERVICE_URL: http://job-service:3002
+      INTERVIEW_SERVICE_URL: http://interview-service:3003
+      APPLICATION_SERVICE_URL: http://application-service:3004
+    depends_on:
+      - user-service
+      - job-service
+      - interview-service
+      - application-service
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - contoso-network
+
+  # User Service
+  user-service:
+    build:
+      context: ..
+      dockerfile: .docker/Dockerfile.services
+      args:
+        SERVICE_PATH: backend/services/user-service
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: development
+      USER_SERVICE_PORT: 3001
+      DB_HOST: sqlserver
+      DB_PORT: 1433
+      DB_USER: sa
+      DB_PASSWORD: "YourSQLPassword123!"
+      DB_NAME: ContosoCivilApp
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    networks:
+      - contoso-network
+
+  # Job Service
+  job-service:
+    build:
+      context: ..
+      dockerfile: .docker/Dockerfile.services
+      args:
+        SERVICE_PATH: backend/services/job-service
+    ports:
+      - "3002:3002"
+    environment:
+      NODE_ENV: development
+      JOB_SERVICE_PORT: 3002
+      DB_HOST: sqlserver
+      DB_PORT: 1433
+      DB_USER: sa
+      DB_PASSWORD: "YourSQLPassword123!"
+      DB_NAME: ContosoCivilApp
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    networks:
+      - contoso-network
+
+  # Interview Service
+  interview-service:
+    build:
+      context: ..
+      dockerfile: .docker/Dockerfile.services
+      args:
+        SERVICE_PATH: backend/services/interview-service
+    ports:
+      - "3003:3003"
+    environment:
+      NODE_ENV: development
+      INTERVIEW_SERVICE_PORT: 3003
+      DB_HOST: sqlserver
+      DB_PORT: 1433
+      DB_USER: sa
+      DB_PASSWORD: "YourSQLPassword123!"
+      DB_NAME: ContosoCivilApp
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    networks:
+      - contoso-network
+
+  # Application Service
+  application-service:
+    build:
+      context: ..
+      dockerfile: .docker/Dockerfile.services
+      args:
+        SERVICE_PATH: backend/services/application-service
+    ports:
+      - "3004:3004"
+    environment:
+      NODE_ENV: development
+      APPLICATION_SERVICE_PORT: 3004
+      DB_HOST: sqlserver
+      DB_PORT: 1433
+      DB_USER: sa
+      DB_PASSWORD: "YourSQLPassword123!"
+      DB_NAME: ContosoCivilApp
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    networks:
+      - contoso-network
+
+  # Frontend (optional - can be run separately)
+  frontend:
+    build:
+      context: ..
+      dockerfile: .docker/Dockerfile.frontend
+    ports:
+      - "3100:3000"
+    environment:
+      REACT_APP_API_BASE_URL: http://localhost:3000/api
+      REACT_APP_API_GATEWAY_URL: http://localhost:3000
+    depends_on:
+      - api-gateway
+    networks:
+      - contoso-network
+
+volumes:
+  sqlserver_data:
+
+networks:
+  contoso-network:
+    driver: bridge
