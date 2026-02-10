@@ -1,7 +1,9 @@
 # Dockerfile for Microservices
 FROM node:18-alpine
 
-ARG SERVICE_PATH=backend/services/user-service
+# Support both SERVICE_NAME and SERVICE_PATH for flexibility
+ARG SERVICE_NAME=user-service
+ARG SERVICE_PATH=backend/services/${SERVICE_NAME}
 ENV SERVICE_PATH=${SERVICE_PATH}
 
 WORKDIR /app

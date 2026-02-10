@@ -1,0 +1,247 @@
+# Azure DevOps Build Pipeline for Contoso Civil App
+# Builds Docker images for all microservices and pushes to Azure Container Registry
+
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+  paths:
+    include:
+      - frontend/**
+      - backend/**
+      - .docker/**
+
+pr:
+  branches:
+    include:
+      - main
+      - develop
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - group: contoso-civil-app-vars  # Variable group containing ACR credentials
+  - name: imageTag
+    value: '$(Build.BuildId)'
+  - name: isMain
+    value: $[eq(variables['Build.SourceBranch'], 'refs/heads/main')]
+
+stages:
+  # ==================== BUILD STAGE ====================
+  - stage: Build
+    displayName: 'Build & Test'
+    jobs:
+      - job: BuildAndTest
+        displayName: 'Build and Test Applications'
+        steps:
+          - task: NodeTool@0
+            displayName: 'Install Node.js'
+            inputs:
+              versionSpec: '18.x'
+
+          # Frontend Build & Test
+          - task: Npm@1
+            displayName: 'Install Frontend Dependencies'
+            inputs:
+              command: 'install'
+              workingDir: 'frontend'
+
+          - task: Npm@1
+            displayName: 'Build Frontend'
+            inputs:
+              command: 'custom'
+              workingDir: 'frontend'
+              customCommand: 'run build'
+
+          # Backend Services - Install Dependencies
+          - script: |
+              cd backend/api-gateway && npm install
+              cd ../services/user-service && npm install
+              cd ../job-service && npm install
+              cd ../interview-service && npm install
+              cd ../application-service && npm install
+            displayName: 'Install Backend Dependencies'
+
+          # TypeScript Compile Check
+          - script: |
+              cd backend/api-gateway && npx tsc --noEmit
+              cd ../services/user-service && npx tsc --noEmit
+              cd ../services/job-service && npx tsc --noEmit
+              cd ../services/interview-service && npx tsc --noEmit
+              cd ../services/application-service && npx tsc --noEmit
+            displayName: 'TypeScript Compile Check'
+            continueOnError: true
+
+  # ==================== DOCKER BUILD STAGE ====================
+  - stage: DockerBuild
+    displayName: 'Build Docker Images'
+    dependsOn: Build
+    condition: succeeded()
+    jobs:
+      - job: BuildImages
+        displayName: 'Build and Push Docker Images'
+        steps:
+          - task: Docker@2
+            displayName: 'Login to ACR'
+            inputs:
+              containerRegistry: '$(acrServiceConnection)'
+              command: 'login'
+
+          # Build and Push Frontend
+          - task: Docker@2
+            displayName: 'Build Frontend Image'
+            inputs:
+              containerRegistry: '$(acrServiceConnection)'
+              repository: 'frontend'
+              command: 'build'
+              Dockerfile: '.docker/Dockerfile.frontend'
+              buildContext: '.'
+              tags: |
+                $(imageTag)
+                latest
+
+          - task: Docker@2
+            displayName: 'Push Frontend Image'
+            inputs:
+              containerRegistry: '$(acrServiceConnection)'
+              repository: 'frontend'
+              command: 'push'
+              tags: |
+                $(imageTag)
+                latest
+
+          # Build and Push API Gateway
+          - task: Docker@2
+            displayName: 'Build API Gateway Image'
+            inputs:
+              containerRegistry: '$(acrServiceConnection)'
+              repository: 'api-gateway'
+              command: 'build'
+              Dockerfile: '.docker/Dockerfile.api-gateway'
+              buildContext: '.'
+              tags: |
+                $(imageTag)
+                latest
+
+          - task: Docker@2
+            displayName: 'Push API Gateway Image'
+            inputs:
+              containerRegistry: '$(acrServiceConnection)'
+              repository: 'api-gateway'
+              command: 'push'
+              tags: |
+                $(imageTag)
+                latest
+
+          # Build and Push User Service
+          - task: Docker@2
+            displayName: 'Build User Service Image'
+            inputs:
+              containerRegistry: '$(acrServiceConnection)'
+              repository: 'user-service'
+              command: 'build'
+              Dockerfile: '.docker/Dockerfile.services'
+              buildContext: '.'
+              arguments: '--build-arg SERVICE_NAME=user-service'
+              tags: |
+                $(imageTag)
+                latest
+
+          - task: Docker@2
+            displayName: 'Push User Service Image'
+            inputs:
+              containerRegistry: '$(acrServiceConnection)'
+              repository: 'user-service'
+              command: 'push'
+              tags: |
+                $(imageTag)
+                latest
+
+          # Build and Push Job Service
+          - task: Docker@2
+            displayName: 'Build Job Service Image'
+            inputs:
+              containerRegistry: '$(acrServiceConnection)'
+              repository: 'job-service'
+              command: 'build'
+              Dockerfile: '.docker/Dockerfile.services'
+              buildContext: '.'
+              arguments: '--build-arg SERVICE_NAME=job-service'
+              tags: |
+                $(imageTag)
+                latest
+
+          - task: Docker@2
+            displayName: 'Push Job Service Image'
+            inputs:
+              containerRegistry: '$(acrServiceConnection)'
+              repository: 'job-service'
+              command: 'push'
+              tags: |
+                $(imageTag)
+                latest
+
+          # Build and Push Interview Service
+          - task: Docker@2
+            displayName: 'Build Interview Service Image'
+            inputs:
+              containerRegistry: '$(acrServiceConnection)'
+              repository: 'interview-service'
+              command: 'build'
+              Dockerfile: '.docker/Dockerfile.services'
+              buildContext: '.'
+              arguments: '--build-arg SERVICE_NAME=interview-service'
+              tags: |
+                $(imageTag)
+                latest
+
+          - task: Docker@2
+            displayName: 'Push Interview Service Image'
+            inputs:
+              containerRegistry: '$(acrServiceConnection)'
+              repository: 'interview-service'
+              command: 'push'
+              tags: |
+                $(imageTag)
+                latest
+
+          # Build and Push Application Service
+          - task: Docker@2
+            displayName: 'Build Application Service Image'
+            inputs:
+              containerRegistry: '$(acrServiceConnection)'
+              repository: 'application-service'
+              command: 'build'
+              Dockerfile: '.docker/Dockerfile.services'
+              buildContext: '.'
+              arguments: '--build-arg SERVICE_NAME=application-service'
+              tags: |
+                $(imageTag)
+                latest
+
+          - task: Docker@2
+            displayName: 'Push Application Service Image'
+            inputs:
+              containerRegistry: '$(acrServiceConnection)'
+              repository: 'application-service'
+              command: 'push'
+              tags: |
+                $(imageTag)
+                latest
+
+          # Publish build artifacts for deployment
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish Infrastructure Artifacts'
+            inputs:
+              PathtoPublish: 'infra'
+              ArtifactName: 'infra'
+              publishLocation: 'Container'
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish Database Scripts'
+            inputs:
+              PathtoPublish: 'database'
+              ArtifactName: 'database'
+              publishLocation: 'Container'

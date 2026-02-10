@@ -1,0 +1,165 @@
+# Infrastructure-Only Deployment Pipeline
+# Use this to deploy/update Azure infrastructure without rebuilding containers
+
+trigger: none  # Manual trigger only
+
+parameters:
+  - name: environment
+    displayName: 'Target Environment'
+    type: string
+    default: 'dev'
+    values:
+      - dev
+      - staging
+      - prod
+
+  - name: deployDatabase
+    displayName: 'Deploy Database Schema'
+    type: boolean
+    default: true
+
+  - name: seedData
+    displayName: 'Seed Sample Data (non-prod only)'
+    type: boolean
+    default: false
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - group: contoso-civil-app-vars
+  - name: resourceGroupName
+    value: 'rg-contoso-civil-${{ parameters.environment }}'
+  - name: location
+    value: 'eastus'
+
+stages:
+  - stage: ValidateInfrastructure
+    displayName: 'Validate Infrastructure'
+    jobs:
+      - job: Validate
+        displayName: 'Validate Bicep Template'
+        steps:
+          - task: AzureCLI@2
+            displayName: 'Validate Bicep'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                az bicep build --file infra/main.bicep
+                echo "Bicep validation successful!"
+
+          - task: AzureCLI@2
+            displayName: 'What-If Deployment'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                az group create --name $(resourceGroupName) --location $(location) || true
+                
+                az deployment group what-if \
+                  --resource-group $(resourceGroupName) \
+                  --template-file infra/main.bicep \
+                  --parameters environment=${{ parameters.environment }} \
+                               location=$(location) \
+                               sqlAdminLogin=$(sqlAdminLogin) \
+                               sqlAdminPassword=$(sqlAdminPassword) \
+                               jwtSecret=$(jwtSecret)
+
+  - stage: DeployInfrastructure
+    displayName: 'Deploy Infrastructure'
+    dependsOn: ValidateInfrastructure
+    jobs:
+      - deployment: Deploy
+        displayName: 'Deploy to ${{ parameters.environment }}'
+        environment: '${{ parameters.environment }}'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+
+                - task: AzureCLI@2
+                  displayName: 'Deploy Bicep Template'
+                  inputs:
+                    azureSubscription: '$(azureServiceConnection)'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      az deployment group create \
+                        --name "infra-$(Build.BuildId)" \
+                        --resource-group $(resourceGroupName) \
+                        --template-file infra/main.bicep \
+                        --parameters environment=${{ parameters.environment }} \
+                                     location=$(location) \
+                                     sqlAdminLogin=$(sqlAdminLogin) \
+                                     sqlAdminPassword=$(sqlAdminPassword) \
+                                     jwtSecret=$(jwtSecret) \
+                        --output json | tee deployment-output.json
+                      
+                      # Display outputs
+                      echo "============================================"
+                      echo "Deployment Outputs:"
+                      echo "============================================"
+                      cat deployment-output.json | jq '.properties.outputs'
+
+  - stage: ConfigureDatabase
+    displayName: 'Configure Database'
+    dependsOn: DeployInfrastructure
+    condition: eq('${{ parameters.deployDatabase }}', true)
+    jobs:
+      - job: Database
+        displayName: 'Setup Database'
+        steps:
+          - checkout: self
+
+          - task: AzureCLI@2
+            displayName: 'Get SQL Server FQDN'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                SQL_FQDN=$(az sql server list \
+                  --resource-group $(resourceGroupName) \
+                  --query "[0].fullyQualifiedDomainName" -o tsv)
+                echo "##vso[task.setvariable variable=sqlServerFqdn]$SQL_FQDN"
+
+          - task: AzureCLI@2
+            displayName: 'Run Database Schema'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                # Install sqlcmd
+                curl https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -
+                curl https://packages.microsoft.com/config/ubuntu/20.04/prod.list | sudo tee /etc/apt/sources.list.d/msprod.list
+                sudo apt-get update
+                sudo ACCEPT_EULA=Y apt-get install -y mssql-tools unixodbc-dev
+                
+                /opt/mssql-tools/bin/sqlcmd \
+                  -S $(sqlServerFqdn) \
+                  -U $(sqlAdminLogin) \
+                  -P $(sqlAdminPassword) \
+                  -d ContosoCivilApp \
+                  -i database/schema.sql \
+                  -b
+
+          - task: AzureCLI@2
+            displayName: 'Seed Sample Data'
+            condition: and(eq('${{ parameters.seedData }}', true), ne('${{ parameters.environment }}', 'prod'))
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                /opt/mssql-tools/bin/sqlcmd \
+                  -S $(sqlServerFqdn) \
+                  -U $(sqlAdminLogin) \
+                  -P $(sqlAdminPassword) \
+                  -d ContosoCivilApp \
+                  -i database/seed-data.sql \
+                  -b

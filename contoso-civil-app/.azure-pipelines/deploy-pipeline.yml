@@ -1,0 +1,259 @@
+# Azure DevOps Deployment Pipeline for Contoso Civil App
+# Deploys infrastructure and container apps to Azure
+
+trigger: none  # Manual trigger or triggered by build pipeline
+
+resources:
+  pipelines:
+    - pipeline: build
+      source: 'contoso-civil-app-build'  # Name of the build pipeline
+      trigger:
+        branches:
+          include:
+            - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - group: contoso-civil-app-vars
+  - name: resourceGroupName
+    value: 'rg-contoso-civil-$(environment)'
+  - name: location
+    value: 'eastus'
+
+stages:
+  # ==================== INFRASTRUCTURE DEPLOYMENT ====================
+  - stage: DeployInfrastructure
+    displayName: 'Deploy Infrastructure'
+    jobs:
+      - deployment: DeployInfra
+        displayName: 'Deploy Azure Infrastructure'
+        environment: '$(environment)'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: build
+                  artifact: infra
+                  displayName: 'Download Infrastructure Artifacts'
+
+                - download: build
+                  artifact: database
+                  displayName: 'Download Database Scripts'
+
+                - task: AzureCLI@2
+                  displayName: 'Create Resource Group'
+                  inputs:
+                    azureSubscription: '$(azureServiceConnection)'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      az group create \
+                        --name $(resourceGroupName) \
+                        --location $(location)
+
+                - task: AzureCLI@2
+                  displayName: 'Deploy Bicep Template'
+                  inputs:
+                    azureSubscription: '$(azureServiceConnection)'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      az deployment group create \
+                        --name "deployment-$(Build.BuildId)" \
+                        --resource-group $(resourceGroupName) \
+                        --template-file $(Pipeline.Workspace)/build/infra/main.bicep \
+                        --parameters environment=$(environment) \
+                                     location=$(location) \
+                                     sqlAdminLogin=$(sqlAdminLogin) \
+                                     sqlAdminPassword=$(sqlAdminPassword) \
+                                     jwtSecret=$(jwtSecret) \
+                        --output json > deployment-output.json
+                      
+                      # Extract outputs
+                      echo "##vso[task.setvariable variable=acrLoginServer]$(cat deployment-output.json | jq -r '.properties.outputs.acrLoginServer.value')"
+                      echo "##vso[task.setvariable variable=apiGatewayUrl]$(cat deployment-output.json | jq -r '.properties.outputs.apiGatewayUrl.value')"
+                      echo "##vso[task.setvariable variable=frontendUrl]$(cat deployment-output.json | jq -r '.properties.outputs.frontendUrl.value')"
+                      echo "##vso[task.setvariable variable=sqlServerFqdn]$(cat deployment-output.json | jq -r '.properties.outputs.sqlServerFqdn.value')"
+
+                - task: AzureCLI@2
+                  displayName: 'Initialize Database Schema'
+                  inputs:
+                    azureSubscription: '$(azureServiceConnection)'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      # Install sqlcmd
+                      curl https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -
+                      curl https://packages.microsoft.com/config/ubuntu/20.04/prod.list | sudo tee /etc/apt/sources.list.d/msprod.list
+                      sudo apt-get update
+                      sudo ACCEPT_EULA=Y apt-get install -y mssql-tools unixodbc-dev
+                      
+                      # Run schema script
+                      /opt/mssql-tools/bin/sqlcmd \
+                        -S $(sqlServerFqdn) \
+                        -U $(sqlAdminLogin) \
+                        -P $(sqlAdminPassword) \
+                        -d ContosoCivilApp \
+                        -i $(Pipeline.Workspace)/build/database/schema.sql \
+                        -b
+                      
+                      # Run seed data script (only for dev/staging)
+                      if [ "$(environment)" != "prod" ]; then
+                        /opt/mssql-tools/bin/sqlcmd \
+                          -S $(sqlServerFqdn) \
+                          -U $(sqlAdminLogin) \
+                          -P $(sqlAdminPassword) \
+                          -d ContosoCivilApp \
+                          -i $(Pipeline.Workspace)/build/database/seed-data.sql \
+                          -b
+                      fi
+                  continueOnError: true
+
+  # ==================== DEV DEPLOYMENT ====================
+  - stage: DeployDev
+    displayName: 'Deploy to Development'
+    dependsOn: DeployInfrastructure
+    condition: and(succeeded(), eq(variables['environment'], 'dev'))
+    variables:
+      environment: 'dev'
+    jobs:
+      - deployment: DeployContainerApps
+        displayName: 'Deploy Container Apps'
+        environment: 'dev'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: AzureCLI@2
+                  displayName: 'Update Container Apps with Latest Images'
+                  inputs:
+                    azureSubscription: '$(azureServiceConnection)'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      # Update each container app with the new image
+                      SERVICES=("user-service" "job-service" "interview-service" "application-service" "api-gateway" "frontend")
+                      
+                      for service in "${SERVICES[@]}"; do
+                        echo "Updating contoso-civil-$service..."
+                        az containerapp update \
+                          --name "contoso-civil-$service" \
+                          --resource-group $(resourceGroupName) \
+                          --image "$(acrName).azurecr.io/$service:$(Build.BuildId)" \
+                          --output none
+                      done
+                      
+                      echo "All services updated successfully!"
+
+                - task: AzureCLI@2
+                  displayName: 'Get Deployment URLs'
+                  inputs:
+                    azureSubscription: '$(azureServiceConnection)'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      echo "============================================"
+                      echo "Deployment Complete!"
+                      echo "============================================"
+                      
+                      FRONTEND_URL=$(az containerapp show \
+                        --name contoso-civil-frontend \
+                        --resource-group $(resourceGroupName) \
+                        --query "properties.configuration.ingress.fqdn" -o tsv)
+                      
+                      API_URL=$(az containerapp show \
+                        --name contoso-civil-api-gateway \
+                        --resource-group $(resourceGroupName) \
+                        --query "properties.configuration.ingress.fqdn" -o tsv)
+                      
+                      echo "Frontend URL: https://$FRONTEND_URL"
+                      echo "API Gateway URL: https://$API_URL"
+                      echo "============================================"
+
+  # ==================== STAGING DEPLOYMENT ====================
+  - stage: DeployStaging
+    displayName: 'Deploy to Staging'
+    dependsOn: DeployDev
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    variables:
+      environment: 'staging'
+    jobs:
+      - deployment: DeployToStaging
+        displayName: 'Deploy to Staging Environment'
+        environment: 'staging'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: AzureCLI@2
+                  displayName: 'Deploy to Staging'
+                  inputs:
+                    azureSubscription: '$(azureServiceConnection)'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      SERVICES=("user-service" "job-service" "interview-service" "application-service" "api-gateway" "frontend")
+                      
+                      for service in "${SERVICES[@]}"; do
+                        az containerapp update \
+                          --name "contoso-civil-$service" \
+                          --resource-group "rg-contoso-civil-staging" \
+                          --image "$(acrName).azurecr.io/$service:$(Build.BuildId)" \
+                          --output none
+                      done
+
+  # ==================== PRODUCTION DEPLOYMENT ====================
+  - stage: DeployProduction
+    displayName: 'Deploy to Production'
+    dependsOn: DeployStaging
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    variables:
+      environment: 'prod'
+    jobs:
+      - deployment: DeployToProduction
+        displayName: 'Deploy to Production Environment'
+        environment: 'production'  # Requires manual approval
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: AzureCLI@2
+                  displayName: 'Deploy to Production'
+                  inputs:
+                    azureSubscription: '$(azureServiceConnection)'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      SERVICES=("user-service" "job-service" "interview-service" "application-service" "api-gateway" "frontend")
+                      
+                      for service in "${SERVICES[@]}"; do
+                        az containerapp update \
+                          --name "contoso-civil-$service" \
+                          --resource-group "rg-contoso-civil-prod" \
+                          --image "$(acrName).azurecr.io/$service:$(Build.BuildId)" \
+                          --output none
+                      done
+
+                - task: AzureCLI@2
+                  displayName: 'Production Health Check'
+                  inputs:
+                    azureSubscription: '$(azureServiceConnection)'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      FRONTEND_URL=$(az containerapp show \
+                        --name contoso-civil-frontend \
+                        --resource-group "rg-contoso-civil-prod" \
+                        --query "properties.configuration.ingress.fqdn" -o tsv)
+                      
+                      # Health check
+                      HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://$FRONTEND_URL")
+                      
+                      if [ "$HTTP_STATUS" -eq 200 ]; then
+                        echo "Production deployment successful! Frontend is healthy."
+                      else
+                        echo "Warning: Frontend returned HTTP status $HTTP_STATUS"
+                        exit 1
+                      fi
