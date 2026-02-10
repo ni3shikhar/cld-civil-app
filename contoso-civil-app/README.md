@@ -115,7 +115,9 @@ ContosoCivilApp/
 
 **Deployment:**
 - Docker & Docker Compose
-- Support for Kubernetes (future)
+- Azure Container Apps
+- Azure SQL Database
+- CI/CD with Azure DevOps or GitHub Actions
 
 ## Getting Started
 
@@ -176,6 +178,165 @@ cd backend/api-gateway
 npm install
 npm run dev
 ```
+
+## Deploy to Azure (Manual)
+
+### Prerequisites
+- Azure CLI installed and authenticated (`az login`)
+- Docker Desktop running
+- Azure subscription with Contributor access
+
+### Step 1: Create Resource Group
+
+```bash
+az group create --name rg-contoso-civil-dev --location westus2
+```
+
+### Step 2: Deploy Infrastructure with Bicep
+
+```bash
+az deployment group create \
+  --resource-group rg-contoso-civil-dev \
+  --template-file infra/main.bicep \
+  --parameters environment=dev \
+               location=westus2 \
+               sqlAdminPassword="YourStrongP@ssword123!" \
+               jwtSecret="your-32-character-jwt-secret-key"
+```
+
+### Step 3: Get Deployment Outputs
+
+```bash
+az deployment group show \
+  -g rg-contoso-civil-dev \
+  -n main \
+  --query properties.outputs
+```
+
+Save these values:
+- `acrLoginServer` - Container Registry URL
+- `acrName` - Container Registry name
+- `frontendUrl` - Frontend application URL
+- `apiGatewayUrl` - API Gateway URL
+- `sqlServerFqdn` - SQL Server hostname
+
+### Step 4: Initialize Database
+
+Open Azure Portal → SQL databases → ContosoCivilApp → Query editor
+
+Login with your SQL admin credentials and run:
+
+1. Copy content from `database/schema.sql` (run in batches, removing `GO` statements)
+2. Copy content from `database/seed-data.sql`
+
+**Sample seed data** (run this in Query editor):
+```sql
+-- Insert users (password: password123)
+INSERT INTO Users (Email, PasswordHash, FirstName, LastName, RoleId)
+VALUES 
+('admin@contoso.com', '$2a$10$rQnM1vG5T.VhJ8uxJHXOxeKwZ3NJvL5vKxYwZ3NJvL5vKxYwZ3NJv', 'Admin', 'User', 3),
+('employer@acmecivil.com', '$2a$10$rQnM1vG5T.VhJ8uxJHXOxeKwZ3NJvL5vKxYwZ3NJvL5vKxYwZ3NJv', 'John', 'Smith', 2),
+('student@university.edu', '$2a$10$rQnM1vG5T.VhJ8uxJHXOxeKwZ3NJvL5vKxYwZ3NJvL5vKxYwZ3NJv', 'Jane', 'Doe', 1);
+```
+
+### Step 5: Build and Push Docker Images
+
+```bash
+# Login to Azure Container Registry
+az acr login --name <acrName>
+
+# Set ACR URL variable
+ACR=<acrLoginServer>  # e.g., contosocivilacr12345.azurecr.io
+
+# Build and push Frontend
+docker build -f .docker/Dockerfile.frontend -t $ACR/frontend:latest .
+docker push $ACR/frontend:latest
+
+# Build and push API Gateway
+docker build -f .docker/Dockerfile.api-gateway -t $ACR/api-gateway:latest .
+docker push $ACR/api-gateway:latest
+
+# Build and push User Service
+docker build -f .docker/Dockerfile.services --build-arg SERVICE_NAME=user-service -t $ACR/user-service:latest .
+docker push $ACR/user-service:latest
+
+# Build and push Job Service
+docker build -f .docker/Dockerfile.services --build-arg SERVICE_NAME=job-service -t $ACR/job-service:latest .
+docker push $ACR/job-service:latest
+
+# Build and push Interview Service
+docker build -f .docker/Dockerfile.services --build-arg SERVICE_NAME=interview-service -t $ACR/interview-service:latest .
+docker push $ACR/interview-service:latest
+
+# Build and push Application Service
+docker build -f .docker/Dockerfile.services --build-arg SERVICE_NAME=application-service -t $ACR/application-service:latest .
+docker push $ACR/application-service:latest
+```
+
+### Step 6: Update Container Apps with Real Images
+
+```bash
+RG=rg-contoso-civil-dev
+ACR=<acrLoginServer>
+
+# Update all services
+az containerapp update --name civil-frontend --resource-group $RG --image $ACR/frontend:latest
+az containerapp update --name civil-api-gateway --resource-group $RG --image $ACR/api-gateway:latest
+az containerapp update --name civil-user-service --resource-group $RG --image $ACR/user-service:latest
+az containerapp update --name civil-job-service --resource-group $RG --image $ACR/job-service:latest
+az containerapp update --name civil-interview-service --resource-group $RG --image $ACR/interview-service:latest
+az containerapp update --name civil-app-svc --resource-group $RG --image $ACR/application-service:latest
+```
+
+### Step 7: Verify Deployment
+
+```bash
+# Check all container apps status
+az containerapp list --resource-group $RG --query "[].{Name:name, Status:properties.runningStatus}" -o table
+
+# Get application URLs
+az containerapp show --name civil-frontend --resource-group $RG --query "properties.configuration.ingress.fqdn" -o tsv
+az containerapp show --name civil-api-gateway --resource-group $RG --query "properties.configuration.ingress.fqdn" -o tsv
+```
+
+### Step 8: Access Your Application
+
+- **Frontend**: `https://civil-frontend.<environment-id>.<region>.azurecontainerapps.io`
+- **API Gateway**: `https://civil-api-gateway.<environment-id>.<region>.azurecontainerapps.io`
+
+### Test Accounts
+
+| Role | Email | Password |
+|------|-------|----------|
+| Admin | admin@contoso.com | password123 |
+| Employer | employer@acmecivil.com | password123 |
+| Student | student@university.edu | password123 |
+
+### Cleanup Resources
+
+```bash
+# Delete all resources when done
+az group delete --name rg-contoso-civil-dev --yes --no-wait
+```
+
+### Troubleshooting
+
+**View Container Logs:**
+```bash
+az containerapp logs show --name civil-api-gateway --resource-group $RG --follow
+```
+
+**Check Container Status:**
+```bash
+az containerapp show --name civil-frontend --resource-group $RG --query "properties.runningStatus"
+```
+
+**Restart a Container App:**
+```bash
+az containerapp revision restart --name civil-frontend --resource-group $RG --revision <revision-name>
+```
+
+For CI/CD pipeline setup, see [infra/README.md](./infra/README.md).
 
 ## API Endpoints
 
