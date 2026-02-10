@@ -288,43 +288,43 @@ END
 GO
 
 -- Create views for common queries
-GO
+-- Note: DROP and CREATE pattern used because CREATE VIEW cannot be inside IF...BEGIN block
 
 -- View: Student Job Applications Summary
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[vw_StudentApplications]') AND type in (N'V'))
-BEGIN
-  CREATE VIEW vw_StudentApplications AS
-  SELECT 
-    ja.ApplicationId,
-    ja.AppliedDate,
-    ja.ApplicationStatus,
-    jr.JobTitle,
-    jr.CivilDomain,
-    ep.CompanyName,
-    ep.City,
-    ja.FinalOutcome
-  FROM JobApplications ja
-  JOIN JobRequisitions jr ON ja.JobId = jr.JobId
-  JOIN EmployerProfiles ep ON jr.EmployerId = ep.EmployerId
-END
+DROP VIEW IF EXISTS vw_StudentApplications;
+GO
+
+CREATE VIEW vw_StudentApplications AS
+SELECT 
+  ja.ApplicationId,
+  ja.AppliedDate,
+  ja.ApplicationStatus,
+  jr.JobTitle,
+  jr.CivilDomain,
+  ep.CompanyName,
+  ep.City,
+  ja.FinalOutcome
+FROM JobApplications ja
+JOIN JobRequisitions jr ON ja.JobId = jr.JobId
+JOIN EmployerProfiles ep ON jr.EmployerId = ep.EmployerId;
 GO
 
 -- View: Employer Job Postings Summary
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[vw_EmployerJobs]') AND type in (N'V'))
-BEGIN
-  CREATE VIEW vw_EmployerJobs AS
-  SELECT 
-    jr.JobId,
-    jr.JobTitle,
-    jr.CivilDomain,
-    jr.ApprovalStatus,
-    COUNT(ja.ApplicationId) as ApplicationCount,
-    jr.PostingDate,
-    jr.ExpirationDate
-  FROM JobRequisitions jr
-  LEFT JOIN JobApplications ja ON jr.JobId = ja.JobId
-  GROUP BY jr.JobId, jr.JobTitle, jr.CivilDomain, jr.ApprovalStatus, jr.PostingDate, jr.ExpirationDate
-END
+DROP VIEW IF EXISTS vw_EmployerJobs;
+GO
+
+CREATE VIEW vw_EmployerJobs AS
+SELECT 
+  jr.JobId,
+  jr.JobTitle,
+  jr.CivilDomain,
+  jr.ApprovalStatus,
+  COUNT(ja.ApplicationId) as ApplicationCount,
+  jr.PostingDate,
+  jr.ExpirationDate
+FROM JobRequisitions jr
+LEFT JOIN JobApplications ja ON jr.JobId = ja.JobId
+GROUP BY jr.JobId, jr.JobTitle, jr.CivilDomain, jr.ApprovalStatus, jr.PostingDate, jr.ExpirationDate;
 GO
 
 PRINT 'Database schema created successfully!';
