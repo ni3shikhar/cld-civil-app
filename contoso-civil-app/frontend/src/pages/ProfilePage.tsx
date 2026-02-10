@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppSelector, useAppDispatch } from '../hooks';
 import { updateProfile } from '../slices/authSlice';
@@ -14,10 +14,17 @@ interface UserProfile {
   CreatedDate: string;
 }
 
+interface ResumeInfo {
+  hasResume: boolean;
+  fileName?: string;
+  updatedDate?: string;
+}
+
 const ProfilePage: React.FC = () => {
   const { userId, firstName, lastName, role, isAuthenticated } = useAppSelector((state) => state.auth);
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [editing, setEditing] = useState(false);
@@ -29,6 +36,11 @@ const ProfilePage: React.FC = () => {
   const [changingPassword, setChangingPassword] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  
+  // Resume state
+  const [resumeInfo, setResumeInfo] = useState<ResumeInfo>({ hasResume: false });
+  const [uploadingResume, setUploadingResume] = useState(false);
+  const [downloadingResume, setDownloadingResume] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -47,10 +59,92 @@ const ProfilePage: React.FC = () => {
         firstName: response.data.FirstName,
         lastName: response.data.LastName
       });
+      
+      // Fetch resume info if user is a student
+      if (response.data.RoleName === 'Student') {
+        fetchResumeInfo();
+      }
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to load profile');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchResumeInfo = async () => {
+    try {
+      const response = await authService.getResumeInfo(userId!);
+      setResumeInfo(response.data);
+    } catch (err) {
+      console.error('Failed to fetch resume info:', err);
+    }
+  };
+
+  const handleResumeUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    if (!allowedTypes.includes(file.type)) {
+      setError('Invalid file type. Please upload a PDF or Word document.');
+      return;
+    }
+
+    // Validate file size (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setError('File size exceeds 5MB limit.');
+      return;
+    }
+
+    try {
+      setUploadingResume(true);
+      setError('');
+      await authService.uploadResume(userId!, file);
+      setSuccess('Resume uploaded successfully!');
+      fetchResumeInfo();
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to upload resume');
+    } finally {
+      setUploadingResume(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleResumeDownload = async () => {
+    try {
+      setDownloadingResume(true);
+      const response = await authService.downloadResume(userId!);
+      
+      // Create blob URL and trigger download
+      const blob = new Blob([response.data]);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = resumeInfo.fileName || 'resume';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to download resume');
+    } finally {
+      setDownloadingResume(false);
+    }
+  };
+
+  const handleResumeDelete = async () => {
+    if (!window.confirm('Are you sure you want to delete your resume?')) return;
+
+    try {
+      setError('');
+      await authService.deleteResume(userId!);
+      setResumeInfo({ hasResume: false });
+      setSuccess('Resume deleted successfully!');
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to delete resume');
     }
   };
 
@@ -326,6 +420,187 @@ const ProfilePage: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Resume Section - Only for Students */}
+      {profile?.RoleName === 'Student' && (
+        <div style={{ backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', marginTop: '1.5rem', overflow: 'hidden' }}>
+          <div style={{ padding: '1.5rem', borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1976D2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+              <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+            <h3 style={{ margin: 0 }}>Resume</h3>
+          </div>
+          <div style={{ padding: '1.5rem' }}>
+            {resumeInfo.hasResume ? (
+              <div>
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  padding: '1rem', 
+                  backgroundColor: '#f5f5f5', 
+                  borderRadius: '8px',
+                  gap: '1rem',
+                  marginBottom: '1rem'
+                }}>
+                  <div style={{ 
+                    width: '48px', 
+                    height: '48px', 
+                    backgroundColor: '#e3f2fd', 
+                    borderRadius: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="#1976D2">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/>
+                      <path d="M14 2v6h6"/>
+                    </svg>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ margin: 0, fontWeight: '500', wordBreak: 'break-word' }}>{resumeInfo.fileName}</p>
+                    {resumeInfo.updatedDate && (
+                      <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.85rem', color: '#666' }}>
+                        Updated: {new Date(resumeInfo.updatedDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={handleResumeDownload}
+                    disabled={downloadingResume}
+                    style={{
+                      padding: '0.6rem 1.25rem',
+                      backgroundColor: '#4CAF50',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: downloadingResume ? 'not-allowed' : 'pointer',
+                      fontSize: '0.9rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      opacity: downloadingResume ? 0.7 : 1
+                    }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                      <polyline points="7 10 12 15 17 10"/>
+                      <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    {downloadingResume ? 'Downloading...' : 'Download'}
+                  </button>
+                  <label style={{
+                    padding: '0.6rem 1.25rem',
+                    backgroundColor: '#1976D2',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: uploadingResume ? 'not-allowed' : 'pointer',
+                    fontSize: '0.9rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    opacity: uploadingResume ? 0.7 : 1
+                  }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                      <polyline points="17 8 12 3 7 8"/>
+                      <line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                    {uploadingResume ? 'Uploading...' : 'Replace'}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".pdf,.doc,.docx"
+                      onChange={handleResumeUpload}
+                      disabled={uploadingResume}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
+                  <button
+                    onClick={handleResumeDelete}
+                    style={{
+                      padding: '0.6rem 1.25rem',
+                      backgroundColor: '#fff',
+                      color: '#f44336',
+                      border: '1px solid #f44336',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '0.9rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem'
+                    }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="3 6 5 6 21 6"/>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                    </svg>
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '2rem' }}>
+                <div style={{ 
+                  width: '80px', 
+                  height: '80px', 
+                  backgroundColor: '#f5f5f5', 
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 1rem auto'
+                }}>
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="12" y1="18" x2="12" y2="12"/>
+                    <line x1="9" y1="15" x2="15" y2="15"/>
+                  </svg>
+                </div>
+                <p style={{ color: '#666', marginBottom: '1rem' }}>No resume uploaded yet</p>
+                <p style={{ color: '#999', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
+                  Upload your resume to help employers learn more about your qualifications. <br/>
+                  Accepted formats: PDF, DOC, DOCX (Max 5MB)
+                </p>
+                <label style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  padding: '0.75rem 1.5rem',
+                  backgroundColor: '#1976D2',
+                  color: 'white',
+                  borderRadius: '6px',
+                  cursor: uploadingResume ? 'not-allowed' : 'pointer',
+                  fontSize: '1rem',
+                  opacity: uploadingResume ? 0.7 : 1
+                }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                  </svg>
+                  {uploadingResume ? 'Uploading...' : 'Upload Resume'}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.doc,.docx"
+                    onChange={handleResumeUpload}
+                    disabled={uploadingResume}
+                    style={{ display: 'none' }}
+                  />
+                </label>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Change Password Modal */}
       {showPasswordForm && (

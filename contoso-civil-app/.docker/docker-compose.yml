@@ -19,6 +19,19 @@ services:
     networks:
       - contoso-network
 
+  # Azurite - Azure Storage Emulator for local development
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite
+    ports:
+      - "10000:10000"  # Blob service
+      - "10001:10001"  # Queue service
+      - "10002:10002"  # Table service
+    volumes:
+      - azurite_data:/data
+    command: "azurite --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0"
+    networks:
+      - contoso-network
+
   # API Gateway
   api-gateway:
     build:
@@ -63,9 +76,13 @@ services:
       DB_USER: sa
       DB_PASSWORD: "YourSQLPassword123!"
       DB_NAME: ContosoCivilApp
+      AZURE_STORAGE_CONNECTION_STRING: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;"
+      AZURE_STORAGE_CONTAINER_NAME: resumes
     depends_on:
       sqlserver:
         condition: service_healthy
+      azurite:
+        condition: service_started
     networks:
       - contoso-network
 
@@ -155,6 +172,7 @@ services:
 
 volumes:
   sqlserver_data:
+  azurite_data:
 
 networks:
   contoso-network:

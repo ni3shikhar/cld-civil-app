@@ -25,6 +25,18 @@ export const authService = {
   updateProfile: (id: string, data: any) => apiClient.put(`/users/${id}`, data),
   changePassword: (id: string, data: { currentPassword: string; newPassword: string }) => 
     apiClient.post(`/users/${id}/change-password`, data),
+  // Resume management
+  uploadResume: (id: string, file: File) => {
+    const formData = new FormData();
+    formData.append('resume', file);
+    return apiClient.post(`/users/${id}/resume`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  getResumeInfo: (id: string) => apiClient.get(`/users/${id}/resume/info`),
+  downloadResume: (id: string) => 
+    apiClient.get(`/users/${id}/resume`, { responseType: 'blob' }),
+  deleteResume: (id: string) => apiClient.delete(`/users/${id}/resume`),
 };
 
 export const jobService = {

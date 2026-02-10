@@ -20,8 +20,8 @@ RUN npm install --prefix ./${SERVICE_PATH}
 # Copy application code
 COPY ${SERVICE_PATH} ./${SERVICE_PATH}
 
-# Build TypeScript
-RUN npm run build --prefix ./${SERVICE_PATH}
+# Build TypeScript - use node to execute tsc
+RUN cd ./${SERVICE_PATH} && node ./node_modules/typescript/bin/tsc
 
 # Expose dynamic port (passed via docker-compose)
 EXPOSE 3001 3002 3003 3004

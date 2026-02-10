@@ -58,7 +58,7 @@ BEGIN
     Specialization VARCHAR(100),
     GraduationYear INT,
     CGPA DECIMAL(3,2),
-    Resume VARBINARY(MAX),
+    ResumeBlobName VARCHAR(500),
     ResumeFileName VARCHAR(255),
     Bio TEXT,
     Skills VARCHAR(MAX),

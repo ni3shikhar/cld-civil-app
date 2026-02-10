@@ -27,6 +27,7 @@ var sqlServerName = 'contoso-civil-sql-${environment}-${uniqueSuffix}'
 var sqlDatabaseName = 'ContosoCivilApp'
 var containerAppsEnvName = 'contoso-civil-env-${environment}'
 var logAnalyticsName = 'contoso-civil-logs-${environment}'
+var storageAccountName = take(replace('civilstr${uniqueSuffix}', '-', ''), 24)
 
 // Use placeholder image for initial deployment (before CI/CD pushes real images)
 var placeholderImage = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
@@ -94,6 +95,37 @@ resource sqlFirewallRule 'Microsoft.Sql/servers/firewallRules@2022-05-01-preview
   }
 }
 
+// Azure Storage Account for Resume files
+resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
+  name: storageAccountName
+  location: location
+  sku: {
+    name: 'Standard_LRS'
+  }
+  kind: 'StorageV2'
+  properties: {
+    accessTier: 'Hot'
+    minimumTlsVersion: 'TLS1_2'
+    supportsHttpsTrafficOnly: true
+    allowBlobPublicAccess: false
+  }
+}
+
+// Blob Service
+resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-01-01' = {
+  parent: storageAccount
+  name: 'default'
+}
+
+// Resume Container
+resource resumeContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-01-01' = {
+  parent: blobService
+  name: 'resumes'
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
 // Container Apps Environment
 resource containerAppsEnvironment 'Microsoft.App/managedEnvironments@2023-05-01' = {
   name: containerAppsEnvName
@@ -111,6 +143,9 @@ resource containerAppsEnvironment 'Microsoft.App/managedEnvironments@2023-05-01'
 
 // SQL Connection String for services
 var sqlConnectionString = 'Server=tcp:${sqlServer.properties.fullyQualifiedDomainName},1433;Database=${sqlDatabaseName};User Id=${sqlAdminLogin};Password=${sqlAdminPassword};Encrypt=true;TrustServerCertificate=false;Connection Timeout=30;'
+
+// Blob Storage Connection String
+var blobStorageConnectionString = 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageAccount.listKeys().keys[0].value};EndpointSuffix=core.windows.net'
 
 // User Service Container App
 resource userService 'Microsoft.App/containerApps@2023-05-01' = {
@@ -144,6 +179,10 @@ resource userService 'Microsoft.App/containerApps@2023-05-01' = {
           name: 'jwt-secret'
           value: jwtSecret
         }
+        {
+          name: 'blob-storage-connection'
+          value: blobStorageConnectionString
+        }
       ]
     }
     template: {
@@ -159,6 +198,8 @@ resource userService 'Microsoft.App/containerApps@2023-05-01' = {
             { name: 'PORT', value: '3001' }
             { name: 'DB_CONNECTION_STRING', secretRef: 'sql-connection' }
             { name: 'JWT_SECRET', secretRef: 'jwt-secret' }
+            { name: 'AZURE_STORAGE_CONNECTION_STRING', secretRef: 'blob-storage-connection' }
+            { name: 'AZURE_STORAGE_CONTAINER_NAME', value: 'resumes' }
           ]
         }
       ]
@@ -455,3 +496,5 @@ output apiGatewayUrl string = 'https://${apiGateway.properties.configuration.ing
 output frontendUrl string = 'https://${frontend.properties.configuration.ingress.fqdn}'
 output sqlServerFqdn string = sqlServer.properties.fullyQualifiedDomainName
 output containerAppsEnvironmentName string = containerAppsEnvironment.name
+output storageAccountName string = storageAccount.name
+output blobContainerName string = resumeContainer.name
