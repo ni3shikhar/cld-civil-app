@@ -190,13 +190,16 @@ jobs:
           # Use default login if not set (SQL_ADMIN_LOGIN from job-level env)
           SQL_LOGIN="${SQL_ADMIN_LOGIN:-sqladmin}"
           
+          # Azure SQL doesn't support CREATE DATABASE or USE statements
+          # Remove lines 4-10 (DB creation and USE blocks) - connect directly to the database (created by Bicep)
+          tail -n +11 database/schema.sql > database/azure-schema.sql
+          
           # Run schema using SQLCMDPASSWORD env var (avoids shell escaping issues)
-          # Connect to master first (schema.sql creates the database if needed)
           /opt/mssql-tools18/bin/sqlcmd \
             -S "$SQL_SERVER" \
             -U "$SQL_LOGIN" \
-            -d master \
-            -i database/schema.sql \
+            -d ContosoCivilApp \
+            -i database/azure-schema.sql \
             -C -b
           
           # Clean up firewall rule
