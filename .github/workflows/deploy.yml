@@ -41,6 +41,11 @@ jobs:
     if: github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch'
     environment: ${{ github.event.inputs.environment || 'dev' }}
     
+    env:
+      SQL_ADMIN_PASSWORD: ${{ secrets.SQL_ADMIN_PASSWORD }}
+      SQL_ADMIN_LOGIN: ${{ secrets.SQL_ADMIN_LOGIN }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+    
     outputs:
       acr_login_server: ${{ steps.deploy.outputs.acrLoginServer }}
       api_url: ${{ steps.deploy.outputs.apiGatewayUrl }}
@@ -64,26 +69,22 @@ jobs:
           echo "resource_group=${{ secrets.RESOURCE_GROUP }}" >> $GITHUB_OUTPUT
 
       - name: Validate Required Secrets
-        env:
-          SQL_PWD: ${{ secrets.SQL_ADMIN_PASSWORD }}
-          SQL_LOGIN: ${{ secrets.SQL_ADMIN_LOGIN }}
-          JWT: ${{ secrets.JWT_SECRET }}
         run: |
           echo "Validating required secrets..."
-          echo "SQL_ADMIN_PASSWORD length: ${#SQL_PWD}"
-          echo "SQL_ADMIN_LOGIN length: ${#SQL_LOGIN}"
-          echo "JWT_SECRET length: ${#JWT}"
+          echo "SQL_ADMIN_PASSWORD length: ${#SQL_ADMIN_PASSWORD}"
+          echo "SQL_ADMIN_LOGIN length: ${#SQL_ADMIN_LOGIN}"
+          echo "JWT_SECRET length: ${#JWT_SECRET}"
           
-          if [ -z "$SQL_PWD" ] || [ ${#SQL_PWD} -lt 8 ]; then
+          if [ -z "$SQL_ADMIN_PASSWORD" ] || [ ${#SQL_ADMIN_PASSWORD} -lt 8 ]; then
             echo "::error::SQL_ADMIN_PASSWORD is missing or too short (min 8 chars)"
             exit 1
           fi
           
-          if [ -z "$SQL_LOGIN" ]; then
+          if [ -z "$SQL_ADMIN_LOGIN" ]; then
             echo "::warning::SQL_ADMIN_LOGIN not set, will use default 'sqladmin'"
           fi
           
-          if [ -z "$JWT" ]; then
+          if [ -z "$JWT_SECRET" ]; then
             echo "::warning::JWT_SECRET not set"
           fi
           
@@ -99,20 +100,17 @@ jobs:
         id: deploy
         if: github.event.inputs.deploy_infra != 'false'
         env:
-          SQL_ADMIN_PASSWORD: ${{ secrets.SQL_ADMIN_PASSWORD }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          SQL_ADMIN_LOGIN_INPUT: ${{ secrets.SQL_ADMIN_LOGIN }}
           DEPLOY_ENV: ${{ steps.env.outputs.environment }}
           DEPLOY_RG: ${{ secrets.RESOURCE_GROUP }}
           DEPLOY_LOCATION: ${{ env.LOCATION }}
           RUN_ID: ${{ github.run_id }}
         run: |
           # Use default login if not set
-          SQL_ADMIN_LOGIN="${SQL_ADMIN_LOGIN_INPUT:-sqladmin}"
+          SQL_LOGIN="${SQL_ADMIN_LOGIN:-sqladmin}"
           
           # Debug: print password length (not value)
           echo "Password length: ${#SQL_ADMIN_PASSWORD}"
-          echo "Login: $SQL_ADMIN_LOGIN"
+          echo "Login: $SQL_LOGIN"
           
           # Create parameters JSON file to handle special characters
           cat > params.json << 'PARAMS_EOF'
@@ -128,7 +126,7 @@ jobs:
           # Replace placeholders with actual values using jq
           jq --arg env "$DEPLOY_ENV" \
              --arg loc "$DEPLOY_LOCATION" \
-             --arg login "$SQL_ADMIN_LOGIN" \
+             --arg login "$SQL_LOGIN" \
              --arg pwd "$SQL_ADMIN_PASSWORD" \
              --arg jwt "$JWT_SECRET" \
              '.environment.value = $env | .location.value = $loc | .sqlAdminLogin.value = $login | .sqlAdminPassword.value = $pwd | .jwtSecret.value = $jwt' \
@@ -152,7 +150,6 @@ jobs:
         if: github.event.inputs.deploy_database == 'true'
         env:
           SQL_SERVER: ${{ steps.deploy.outputs.sqlServerFqdn }}
-          SQL_USER: ${{ secrets.SQL_ADMIN_LOGIN }}
           SQLCMDPASSWORD: ${{ secrets.SQL_ADMIN_PASSWORD }}
         run: |
           # Install sqlcmd
@@ -161,8 +158,8 @@ jobs:
           sudo apt-get update
           sudo ACCEPT_EULA=Y apt-get install -y mssql-tools18 unixodbc-dev
           
-          # Use default login if not set
-          SQL_LOGIN="${SQL_USER:-sqladmin}"
+          # Use default login if not set (SQL_ADMIN_LOGIN from job-level env)
+          SQL_LOGIN="${SQL_ADMIN_LOGIN:-sqladmin}"
           
           # Run schema using SQLCMDPASSWORD env var (avoids shell escaping issues)
           /opt/mssql-tools18/bin/sqlcmd \
