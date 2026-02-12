@@ -149,9 +149,38 @@ jobs:
       - name: Initialize Database
         if: github.event.inputs.deploy_database == 'true'
         env:
-          SQL_SERVER: ${{ steps.deploy.outputs.sqlServerFqdn }}
+          SQL_SERVER_OUTPUT: ${{ steps.deploy.outputs.sqlServerFqdn }}
           SQLCMDPASSWORD: ${{ secrets.SQL_ADMIN_PASSWORD }}
+          RESOURCE_GROUP: ${{ secrets.RESOURCE_GROUP }}
         run: |
+          # Get SQL server FQDN - from deploy output or query Azure
+          if [ -n "$SQL_SERVER_OUTPUT" ]; then
+            SQL_SERVER="$SQL_SERVER_OUTPUT"
+          else
+            echo "Deploy output empty, querying Azure for SQL server..."
+            SQL_SERVER=$(az sql server list -g "$RESOURCE_GROUP" --query "[0].fullyQualifiedDomainName" -o tsv)
+          fi
+          
+          echo "SQL Server: $SQL_SERVER"
+          
+          if [ -z "$SQL_SERVER" ]; then
+            echo "::error::Could not determine SQL Server FQDN"
+            exit 1
+          fi
+          
+          # Get SQL server name (without domain)
+          SQL_SERVER_NAME=$(echo "$SQL_SERVER" | cut -d'.' -f1)
+          
+          # Get runner's public IP and add to SQL firewall
+          RUNNER_IP=$(curl -s https://api.ipify.org)
+          echo "Adding runner IP $RUNNER_IP to SQL firewall..."
+          az sql server firewall-rule create \
+            -g "$RESOURCE_GROUP" \
+            -s "$SQL_SERVER_NAME" \
+            -n "GitHubRunner-${{ github.run_id }}" \
+            --start-ip-address "$RUNNER_IP" \
+            --end-ip-address "$RUNNER_IP"
+          
           # Install sqlcmd
           curl https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -
           curl https://packages.microsoft.com/config/ubuntu/22.04/prod.list | sudo tee /etc/apt/sources.list.d/msprod.list
@@ -162,12 +191,21 @@ jobs:
           SQL_LOGIN="${SQL_ADMIN_LOGIN:-sqladmin}"
           
           # Run schema using SQLCMDPASSWORD env var (avoids shell escaping issues)
+          # Connect to master first (schema.sql creates the database if needed)
           /opt/mssql-tools18/bin/sqlcmd \
             -S "$SQL_SERVER" \
             -U "$SQL_LOGIN" \
-            -d ContosoCivilApp \
+            -d master \
             -i database/schema.sql \
             -C -b
+          
+          # Clean up firewall rule
+          echo "Removing runner IP from SQL firewall..."
+          az sql server firewall-rule delete \
+            -g "$RESOURCE_GROUP" \
+            -s "$SQL_SERVER_NAME" \
+            -n "GitHubRunner-${{ github.run_id }}" \
+            --yes
 
   deploy-containers:
     name: Build & Deploy Container Apps
