@@ -1,0 +1,138 @@
+name: Decommission Infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_delete:
+        description: 'Type "DELETE" to confirm resource deletion'
+        required: true
+        type: string
+      delete_resource_group:
+        description: 'Delete entire resource group?'
+        required: true
+        type: boolean
+        default: false
+
+env:
+  BICEP_FILE: infra/main.bicep
+
+jobs:
+  validate:
+    name: Validate Confirmation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check confirmation
+        if: ${{ github.event.inputs.confirm_delete != 'DELETE' }}
+        run: |
+          echo "::error::Confirmation failed. You must type 'DELETE' to proceed."
+          exit 1
+
+  decommission:
+    name: Decommission Resources
+    runs-on: ubuntu-latest
+    needs: validate
+    environment:
+      name: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Delete entire resource group
+        if: ${{ github.event.inputs.delete_resource_group == 'true' }}
+        run: |
+          echo "Deleting resource group: ${{ secrets.RESOURCE_GROUP }}"
+          az group delete \
+            --name "${{ secrets.RESOURCE_GROUP }}" \
+            --yes \
+            --no-wait
+          echo "Resource group deletion initiated (running in background)"
+
+      - name: Delete individual resources (keep resource group)
+        if: ${{ github.event.inputs.delete_resource_group == 'false' }}
+        run: |
+          echo "Deleting resources in resource group: ${{ secrets.RESOURCE_GROUP }}"
+          
+          # Get deployment name from bicep (uses 'main' by default)
+          DEPLOYMENT_NAME="main"
+          
+          # List resources created by the deployment
+          echo "Listing resources to delete..."
+          az resource list \
+            --resource-group "${{ secrets.RESOURCE_GROUP }}" \
+            --query "[].{name:name, type:type, id:id}" \
+            -o table
+          
+          # Delete resources in reverse dependency order
+          # 1. Delete App Services
+          echo "Deleting App Services..."
+          az webapp list -g "${{ secrets.RESOURCE_GROUP }}" --query "[].name" -o tsv | while read app; do
+            echo "Deleting webapp: $app"
+            az webapp delete -g "${{ secrets.RESOURCE_GROUP }}" -n "$app" --keep-empty-plan || true
+          done
+          
+          # 2. Delete App Service Plans
+          echo "Deleting App Service Plans..."
+          az appservice plan list -g "${{ secrets.RESOURCE_GROUP }}" --query "[].name" -o tsv | while read plan; do
+            echo "Deleting plan: $plan"
+            az appservice plan delete -g "${{ secrets.RESOURCE_GROUP }}" -n "$plan" --yes || true
+          done
+          
+          # 3. Delete SQL Databases (before server)
+          echo "Deleting SQL Databases..."
+          az sql server list -g "${{ secrets.RESOURCE_GROUP }}" --query "[].name" -o tsv | while read server; do
+            az sql db list -g "${{ secrets.RESOURCE_GROUP }}" -s "$server" --query "[?name!='master'].name" -o tsv | while read db; do
+              echo "Deleting database: $db on server: $server"
+              az sql db delete -g "${{ secrets.RESOURCE_GROUP }}" -s "$server" -n "$db" --yes || true
+            done
+          done
+          
+          # 4. Delete SQL Servers
+          echo "Deleting SQL Servers..."
+          az sql server list -g "${{ secrets.RESOURCE_GROUP }}" --query "[].name" -o tsv | while read server; do
+            echo "Deleting SQL server: $server"
+            az sql server delete -g "${{ secrets.RESOURCE_GROUP }}" -n "$server" --yes || true
+          done
+          
+          # 5. Delete Storage Accounts
+          echo "Deleting Storage Accounts..."
+          az storage account list -g "${{ secrets.RESOURCE_GROUP }}" --query "[].name" -o tsv | while read storage; do
+            echo "Deleting storage: $storage"
+            az storage account delete -g "${{ secrets.RESOURCE_GROUP }}" -n "$storage" --yes || true
+          done
+          
+          # 6. Delete Key Vaults (with purge protection consideration)
+          echo "Deleting Key Vaults..."
+          az keyvault list -g "${{ secrets.RESOURCE_GROUP }}" --query "[].name" -o tsv | while read kv; do
+            echo "Deleting keyvault: $kv"
+            az keyvault delete -g "${{ secrets.RESOURCE_GROUP }}" -n "$kv" || true
+          done
+          
+          # 7. Delete Application Insights
+          echo "Deleting Application Insights..."
+          az monitor app-insights component list -g "${{ secrets.RESOURCE_GROUP }}" --query "[].name" -o tsv 2>/dev/null | while read ai; do
+            echo "Deleting app insights: $ai"
+            az monitor app-insights component delete -g "${{ secrets.RESOURCE_GROUP }}" -a "$ai" --yes || true
+          done 2>/dev/null || true
+          
+          # 8. Delete Log Analytics Workspaces
+          echo "Deleting Log Analytics Workspaces..."
+          az monitor log-analytics workspace list -g "${{ secrets.RESOURCE_GROUP }}" --query "[].name" -o tsv 2>/dev/null | while read ws; do
+            echo "Deleting workspace: $ws"
+            az monitor log-analytics workspace delete -g "${{ secrets.RESOURCE_GROUP }}" -n "$ws" --yes || true
+          done 2>/dev/null || true
+          
+          echo "Resource deletion completed"
+
+      - name: List remaining resources
+        if: ${{ github.event.inputs.delete_resource_group == 'false' }}
+        run: |
+          echo "Remaining resources in ${{ secrets.RESOURCE_GROUP }}:"
+          az resource list \
+            --resource-group "${{ secrets.RESOURCE_GROUP }}" \
+            --query "[].{name:name, type:type}" \
+            -o table || echo "Resource group may have been deleted"
