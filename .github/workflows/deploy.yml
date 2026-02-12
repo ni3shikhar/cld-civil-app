@@ -32,7 +32,7 @@ on:
 
 env:
   AZURE_SUBSCRIPTION: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-  LOCATION: 'eastus'
+  LOCATION: 'westus2'
 
 jobs:
   deploy-infrastructure:
