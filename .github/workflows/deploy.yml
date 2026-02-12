@@ -150,6 +150,10 @@ jobs:
 
       - name: Initialize Database
         if: github.event.inputs.deploy_database == 'true'
+        env:
+          SQL_SERVER: ${{ steps.deploy.outputs.sqlServerFqdn }}
+          SQL_USER: ${{ secrets.SQL_ADMIN_LOGIN }}
+          SQLCMDPASSWORD: ${{ secrets.SQL_ADMIN_PASSWORD }}
         run: |
           # Install sqlcmd
           curl https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -
@@ -157,11 +161,13 @@ jobs:
           sudo apt-get update
           sudo ACCEPT_EULA=Y apt-get install -y mssql-tools18 unixodbc-dev
           
-          # Run schema
+          # Use default login if not set
+          SQL_LOGIN="${SQL_USER:-sqladmin}"
+          
+          # Run schema using SQLCMDPASSWORD env var (avoids shell escaping issues)
           /opt/mssql-tools18/bin/sqlcmd \
-            -S ${{ steps.deploy.outputs.sqlServerFqdn }} \
-            -U ${{ secrets.SQL_ADMIN_LOGIN }} \
-            -P "${{ secrets.SQL_ADMIN_PASSWORD }}" \
+            -S "$SQL_SERVER" \
+            -U "$SQL_LOGIN" \
             -d ContosoCivilApp \
             -i database/schema.sql \
             -C -b
