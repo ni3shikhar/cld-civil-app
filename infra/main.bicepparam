@@ -4,7 +4,7 @@ using './main.bicep'
 // Update these values for your environment
 
 param environment = 'dev'
-param location = 'eastus'
+param location = 'westus2'
 param sqlAdminLogin = 'sqladmin'
 // These secure parameters should be provided at deployment time via Azure DevOps variables
 param sqlAdminPassword = readEnvironmentVariable('SQL_ADMIN_PASSWORD', '')

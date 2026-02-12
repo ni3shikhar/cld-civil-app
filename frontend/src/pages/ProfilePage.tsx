@@ -12,6 +12,19 @@ interface UserProfile {
   RoleName: string;
   IsActive: boolean;
   CreatedDate: string;
+  // Student-specific fields
+  PhoneNumber?: string;
+  StreetAddress?: string;
+  City?: string;
+  State?: string;
+  ZipCode?: string;
+  Country?: string;
+  UniversityName?: string;
+  Specialization?: string;
+  GraduationYear?: number;
+  CGPA?: number;
+  Bio?: string;
+  Skills?: string;
 }
 
 interface ResumeInfo {
@@ -19,6 +32,33 @@ interface ResumeInfo {
   fileName?: string;
   updatedDate?: string;
 }
+
+interface StudentEditForm {
+  firstName: string;
+  lastName: string;
+  phoneNumber: string;
+  streetAddress: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  country: string;
+  universityName: string;
+  specialization: string;
+  graduationYear: string;
+  cgpa: string;
+  bio: string;
+  skills: string;
+}
+
+const US_STATES = [
+  'Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 'Colorado', 'Connecticut', 'Delaware',
+  'Florida', 'Georgia', 'Hawaii', 'Idaho', 'Illinois', 'Indiana', 'Iowa', 'Kansas', 'Kentucky',
+  'Louisiana', 'Maine', 'Maryland', 'Massachusetts', 'Michigan', 'Minnesota', 'Mississippi',
+  'Missouri', 'Montana', 'Nebraska', 'Nevada', 'New Hampshire', 'New Jersey', 'New Mexico',
+  'New York', 'North Carolina', 'North Dakota', 'Ohio', 'Oklahoma', 'Oregon', 'Pennsylvania',
+  'Rhode Island', 'South Carolina', 'South Dakota', 'Tennessee', 'Texas', 'Utah', 'Vermont',
+  'Virginia', 'Washington', 'West Virginia', 'Wisconsin', 'Wyoming'
+];
 
 const ProfilePage: React.FC = () => {
   const { userId, firstName, lastName, role, isAuthenticated } = useAppSelector((state) => state.auth);
@@ -28,7 +68,22 @@ const ProfilePage: React.FC = () => {
   
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [editing, setEditing] = useState(false);
-  const [editForm, setEditForm] = useState({ firstName: '', lastName: '' });
+  const [editForm, setEditForm] = useState<StudentEditForm>({
+    firstName: '',
+    lastName: '',
+    phoneNumber: '',
+    streetAddress: '',
+    city: '',
+    state: '',
+    zipCode: '',
+    country: '',
+    universityName: '',
+    specialization: '',
+    graduationYear: '',
+    cgpa: '',
+    bio: '',
+    skills: ''
+  });
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [loading, setLoading] = useState(true);
@@ -56,8 +111,20 @@ const ProfilePage: React.FC = () => {
       const response = await authService.getProfile(userId!);
       setProfile(response.data);
       setEditForm({
-        firstName: response.data.FirstName,
-        lastName: response.data.LastName
+        firstName: response.data.FirstName || '',
+        lastName: response.data.LastName || '',
+        phoneNumber: response.data.PhoneNumber || '',
+        streetAddress: response.data.StreetAddress || '',
+        city: response.data.City || '',
+        state: response.data.State || '',
+        zipCode: response.data.ZipCode || '',
+        country: response.data.Country || 'United States',
+        universityName: response.data.UniversityName || '',
+        specialization: response.data.Specialization || '',
+        graduationYear: response.data.GraduationYear?.toString() || '',
+        cgpa: response.data.CGPA?.toString() || '',
+        bio: response.data.Bio || '',
+        skills: response.data.Skills || ''
       });
       
       // Fetch resume info if user is a student
@@ -160,14 +227,48 @@ const ProfilePage: React.FC = () => {
 
     try {
       setSaving(true);
-      await authService.updateProfile(userId!, {
+      const updateData: any = {
         firstName: editForm.firstName,
         lastName: editForm.lastName
-      });
+      };
+      
+      // Include student fields if user is a student
+      if (profile?.RoleName === 'Student') {
+        updateData.phoneNumber = editForm.phoneNumber || null;
+        updateData.streetAddress = editForm.streetAddress || null;
+        updateData.city = editForm.city || null;
+        updateData.state = editForm.state || null;
+        updateData.zipCode = editForm.zipCode || null;
+        updateData.country = editForm.country || null;
+        updateData.universityName = editForm.universityName || null;
+        updateData.specialization = editForm.specialization || null;
+        updateData.graduationYear = editForm.graduationYear ? parseInt(editForm.graduationYear) : null;
+        updateData.cgpa = editForm.cgpa ? parseFloat(editForm.cgpa) : null;
+        updateData.bio = editForm.bio || null;
+        updateData.skills = editForm.skills || null;
+      }
+      
+      await authService.updateProfile(userId!, updateData);
       
       // Update local state
       dispatch(updateProfile({ firstName: editForm.firstName, lastName: editForm.lastName }));
-      setProfile(prev => prev ? { ...prev, FirstName: editForm.firstName, LastName: editForm.lastName } : null);
+      setProfile(prev => prev ? { 
+        ...prev, 
+        FirstName: editForm.firstName, 
+        LastName: editForm.lastName,
+        PhoneNumber: editForm.phoneNumber,
+        StreetAddress: editForm.streetAddress,
+        City: editForm.city,
+        State: editForm.state,
+        ZipCode: editForm.zipCode,
+        Country: editForm.country,
+        UniversityName: editForm.universityName,
+        Specialization: editForm.specialization,
+        GraduationYear: editForm.graduationYear ? parseInt(editForm.graduationYear) : undefined,
+        CGPA: editForm.cgpa ? parseFloat(editForm.cgpa) : undefined,
+        Bio: editForm.bio,
+        Skills: editForm.skills
+      } : null);
       setSuccess('Profile updated successfully!');
       setEditing(false);
     } catch (err: any) {
@@ -180,7 +281,19 @@ const ProfilePage: React.FC = () => {
   const handleCancel = () => {
     setEditForm({
       firstName: profile?.FirstName || '',
-      lastName: profile?.LastName || ''
+      lastName: profile?.LastName || '',
+      phoneNumber: profile?.PhoneNumber || '',
+      streetAddress: profile?.StreetAddress || '',
+      city: profile?.City || '',
+      state: profile?.State || '',
+      zipCode: profile?.ZipCode || '',
+      country: profile?.Country || 'United States',
+      universityName: profile?.UniversityName || '',
+      specialization: profile?.Specialization || '',
+      graduationYear: profile?.GraduationYear?.toString() || '',
+      cgpa: profile?.CGPA?.toString() || '',
+      bio: profile?.Bio || '',
+      skills: profile?.Skills || ''
     });
     setEditing(false);
     setError('');
@@ -315,6 +428,67 @@ const ProfilePage: React.FC = () => {
                   </p>
                 </div>
               </div>
+
+              {/* Student Contact Information - Display Mode */}
+              {profile?.RoleName === 'Student' && (
+                <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid #eee' }}>
+                  <h4 style={{ margin: '0 0 1rem 0', color: '#333' }}>Contact Information</h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem' }}>
+                    <div>
+                      <label style={{ display: 'block', color: '#666', fontSize: '0.85rem', marginBottom: '0.25rem' }}>Phone Number</label>
+                      <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: '500' }}>{profile?.PhoneNumber || '-'}</p>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', color: '#666', fontSize: '0.85rem', marginBottom: '0.25rem' }}>Country</label>
+                      <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: '500' }}>{profile?.Country || '-'}</p>
+                    </div>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={{ display: 'block', color: '#666', fontSize: '0.85rem', marginBottom: '0.25rem' }}>Street Address</label>
+                      <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: '500' }}>{profile?.StreetAddress || '-'}</p>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', color: '#666', fontSize: '0.85rem', marginBottom: '0.25rem' }}>City</label>
+                      <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: '500' }}>{profile?.City || '-'}</p>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', color: '#666', fontSize: '0.85rem', marginBottom: '0.25rem' }}>State</label>
+                      <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: '500' }}>{profile?.State || '-'}</p>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', color: '#666', fontSize: '0.85rem', marginBottom: '0.25rem' }}>ZIP Code</label>
+                      <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: '500' }}>{profile?.ZipCode || '-'}</p>
+                    </div>
+                  </div>
+
+                  <h4 style={{ margin: '2rem 0 1rem 0', color: '#333' }}>Education & Skills</h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem' }}>
+                    <div>
+                      <label style={{ display: 'block', color: '#666', fontSize: '0.85rem', marginBottom: '0.25rem' }}>University</label>
+                      <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: '500' }}>{profile?.UniversityName || '-'}</p>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', color: '#666', fontSize: '0.85rem', marginBottom: '0.25rem' }}>Specialization</label>
+                      <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: '500' }}>{profile?.Specialization || '-'}</p>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', color: '#666', fontSize: '0.85rem', marginBottom: '0.25rem' }}>Graduation Year</label>
+                      <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: '500' }}>{profile?.GraduationYear || '-'}</p>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', color: '#666', fontSize: '0.85rem', marginBottom: '0.25rem' }}>CGPA</label>
+                      <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: '500' }}>{profile?.CGPA?.toFixed(2) || '-'}</p>
+                    </div>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={{ display: 'block', color: '#666', fontSize: '0.85rem', marginBottom: '0.25rem' }}>Bio</label>
+                      <p style={{ margin: 0, fontSize: '1rem', fontWeight: '400', lineHeight: '1.5' }}>{profile?.Bio || '-'}</p>
+                    </div>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={{ display: 'block', color: '#666', fontSize: '0.85rem', marginBottom: '0.25rem' }}>Skills</label>
+                      <p style={{ margin: 0, fontSize: '1rem', fontWeight: '400' }}>{profile?.Skills || '-'}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
               
               <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid #eee', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
                 <button 
@@ -381,6 +555,161 @@ const ProfilePage: React.FC = () => {
                   <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.8rem', color: '#999' }}>Email cannot be changed</p>
                 </div>
               </div>
+
+              {/* Student Contact Information - Edit Mode */}
+              {profile?.RoleName === 'Student' && (
+                <>
+                  <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid #eee' }}>
+                    <h4 style={{ margin: '0 0 1rem 0', color: '#333' }}>Contact Information</h4>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem' }}>
+                      <div>
+                        <label style={{ display: 'block', color: '#666', fontSize: '0.85rem', marginBottom: '0.5rem' }}>Phone Number</label>
+                        <input
+                          type="tel"
+                          value={editForm.phoneNumber}
+                          onChange={(e) => {
+                            const value = e.target.value.replace(/\D/g, '');
+                            let formatted = value;
+                            if (value.length >= 6) {
+                              formatted = `(${value.slice(0, 3)}) ${value.slice(3, 6)}-${value.slice(6, 10)}`;
+                            } else if (value.length >= 3) {
+                              formatted = `(${value.slice(0, 3)}) ${value.slice(3)}`;
+                            }
+                            setEditForm({ ...editForm, phoneNumber: formatted });
+                          }}
+                          placeholder="(555) 123-4567"
+                          style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #ccc', fontSize: '1rem' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', color: '#666', fontSize: '0.85rem', marginBottom: '0.5rem' }}>Country</label>
+                        <input
+                          type="text"
+                          value={editForm.country}
+                          onChange={(e) => setEditForm({ ...editForm, country: e.target.value })}
+                          placeholder="United States"
+                          style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #ccc', fontSize: '1rem' }}
+                        />
+                      </div>
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <label style={{ display: 'block', color: '#666', fontSize: '0.85rem', marginBottom: '0.5rem' }}>Street Address</label>
+                        <input
+                          type="text"
+                          value={editForm.streetAddress}
+                          onChange={(e) => setEditForm({ ...editForm, streetAddress: e.target.value })}
+                          placeholder="123 Main Street, Apt 4B"
+                          style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #ccc', fontSize: '1rem' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', color: '#666', fontSize: '0.85rem', marginBottom: '0.5rem' }}>City</label>
+                        <input
+                          type="text"
+                          value={editForm.city}
+                          onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
+                          placeholder="New York"
+                          style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #ccc', fontSize: '1rem' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', color: '#666', fontSize: '0.85rem', marginBottom: '0.5rem' }}>State</label>
+                        <select
+                          value={editForm.state}
+                          onChange={(e) => setEditForm({ ...editForm, state: e.target.value })}
+                          style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #ccc', fontSize: '1rem', backgroundColor: 'white' }}
+                        >
+                          <option value="">Select State</option>
+                          {US_STATES.map(state => (
+                            <option key={state} value={state}>{state}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', color: '#666', fontSize: '0.85rem', marginBottom: '0.5rem' }}>ZIP Code</label>
+                        <input
+                          type="text"
+                          value={editForm.zipCode}
+                          onChange={(e) => setEditForm({ ...editForm, zipCode: e.target.value.replace(/\D/g, '').slice(0, 5) })}
+                          placeholder="10001"
+                          maxLength={5}
+                          style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #ccc', fontSize: '1rem' }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid #eee' }}>
+                    <h4 style={{ margin: '0 0 1rem 0', color: '#333' }}>Education & Skills</h4>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem' }}>
+                      <div>
+                        <label style={{ display: 'block', color: '#666', fontSize: '0.85rem', marginBottom: '0.5rem' }}>University</label>
+                        <input
+                          type="text"
+                          value={editForm.universityName}
+                          onChange={(e) => setEditForm({ ...editForm, universityName: e.target.value })}
+                          placeholder="University Name"
+                          style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #ccc', fontSize: '1rem' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', color: '#666', fontSize: '0.85rem', marginBottom: '0.5rem' }}>Specialization</label>
+                        <input
+                          type="text"
+                          value={editForm.specialization}
+                          onChange={(e) => setEditForm({ ...editForm, specialization: e.target.value })}
+                          placeholder="Civil Engineering"
+                          style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #ccc', fontSize: '1rem' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', color: '#666', fontSize: '0.85rem', marginBottom: '0.5rem' }}>Graduation Year</label>
+                        <input
+                          type="number"
+                          value={editForm.graduationYear}
+                          onChange={(e) => setEditForm({ ...editForm, graduationYear: e.target.value })}
+                          placeholder="2025"
+                          min="1950"
+                          max="2035"
+                          style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #ccc', fontSize: '1rem' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', color: '#666', fontSize: '0.85rem', marginBottom: '0.5rem' }}>CGPA</label>
+                        <input
+                          type="number"
+                          value={editForm.cgpa}
+                          onChange={(e) => setEditForm({ ...editForm, cgpa: e.target.value })}
+                          placeholder="3.75"
+                          min="0"
+                          max="4"
+                          step="0.01"
+                          style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #ccc', fontSize: '1rem' }}
+                        />
+                      </div>
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <label style={{ display: 'block', color: '#666', fontSize: '0.85rem', marginBottom: '0.5rem' }}>Bio</label>
+                        <textarea
+                          value={editForm.bio}
+                          onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
+                          placeholder="Tell us about yourself..."
+                          rows={3}
+                          style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #ccc', fontSize: '1rem', resize: 'vertical' }}
+                        />
+                      </div>
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <label style={{ display: 'block', color: '#666', fontSize: '0.85rem', marginBottom: '0.5rem' }}>Skills</label>
+                        <input
+                          type="text"
+                          value={editForm.skills}
+                          onChange={(e) => setEditForm({ ...editForm, skills: e.target.value })}
+                          placeholder="AutoCAD, Structural Analysis, Project Management..."
+                          style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #ccc', fontSize: '1rem' }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
               
               <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid #eee', display: 'flex', gap: '1rem' }}>
                 <button 

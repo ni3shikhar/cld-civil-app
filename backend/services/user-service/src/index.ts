@@ -54,20 +54,59 @@ async function initializeBlobStorage() {
 
 app.use(express.json());
 
-// SQL Server Configuration
-const sqlConfig: sql.config = {
-  user: process.env.DB_USER || 'sa',
-  password: process.env.DB_PASSWORD || 'YourSQLPassword123!',
-  server: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'ContosoCivilApp',
-  port: parseInt(process.env.DB_PORT || '1433'),
-  connectionTimeout: 30000,
-  requestTimeout: 30000,
-  options: {
-    encrypt: true,
-    trustServerCertificate: true,
-  },
-};
+// Parse connection string if provided (for Azure deployment)
+function parseConnectionString(connStr: string): sql.config {
+  const params: Record<string, string> = {};
+  connStr.split(';').forEach(part => {
+    const [key, ...valueParts] = part.split('=');
+    if (key && valueParts.length > 0) {
+      params[key.trim().toLowerCase()] = valueParts.join('=').trim();
+    }
+  });
+  
+  // Extract server and port from "Server=tcp:hostname,port"
+  let server = params['server'] || 'localhost';
+  let port = 1433;
+  if (server.startsWith('tcp:')) {
+    server = server.substring(4);
+  }
+  if (server.includes(',')) {
+    const [host, portStr] = server.split(',');
+    server = host;
+    port = parseInt(portStr) || 1433;
+  }
+  
+  return {
+    user: params['user id'] || params['uid'] || 'sa',
+    password: params['password'] || params['pwd'] || '',
+    server: server,
+    database: params['database'] || params['initial catalog'] || 'ContosoCivilApp',
+    port: port,
+    connectionTimeout: 30000,
+    requestTimeout: 30000,
+    options: {
+      encrypt: params['encrypt']?.toLowerCase() === 'true',
+      trustServerCertificate: params['trustservercertificate']?.toLowerCase() === 'true',
+    },
+  };
+}
+
+// SQL Server Configuration - supports both connection string and individual env vars
+const sqlConfig: sql.config = process.env.DB_CONNECTION_STRING
+  ? parseConnectionString(process.env.DB_CONNECTION_STRING)
+  : {
+      user: process.env.DB_USER || 'sa',
+      password: process.env.DB_PASSWORD || 'YourSQLPassword123!',
+      server: process.env.DB_HOST || 'localhost',
+      database: process.env.DB_NAME || 'ContosoCivilApp',
+      port: parseInt(process.env.DB_PORT || '1433'),
+      connectionTimeout: 30000,
+      requestTimeout: 30000,
+      options: {
+        encrypt: true,
+        trustServerCertificate: true,
+      },
+    };
 
 let pool: sql.ConnectionPool;
 
@@ -146,11 +185,21 @@ app.post('/api/users/register', async (req: Request, res: Response) => {
         .input('companyName', sql.VarChar, `${firstName}'s Company`)
         .query(`INSERT INTO EmployerProfiles (UserId, CompanyName) VALUES (@userId, @companyName)`);
     } else if (role.toLowerCase() === 'student') {
+      // Extract optional student contact fields
+      const { phoneNumber, streetAddress, city, state, zipCode, country } = req.body;
+      
       const profileRequest = new sql.Request(pool);
       await profileRequest
         .input('studentId', sql.Int, newUserId)
         .input('userId', sql.Int, newUserId)
-        .query(`INSERT INTO StudentProfiles (StudentId, UserId) VALUES (@studentId, @userId)`);
+        .input('phoneNumber', sql.VarChar(20), phoneNumber || null)
+        .input('streetAddress', sql.VarChar(255), streetAddress || null)
+        .input('city', sql.VarChar(100), city || null)
+        .input('state', sql.VarChar(100), state || null)
+        .input('zipCode', sql.VarChar(20), zipCode || null)
+        .input('country', sql.VarChar(100), country || 'United States')
+        .query(`INSERT INTO StudentProfiles (StudentId, UserId, PhoneNumber, StreetAddress, City, State, ZipCode, Country) 
+                VALUES (@studentId, @userId, @phoneNumber, @streetAddress, @city, @state, @zipCode, @country)`);
     }
 
     res.status(201).json({ message: 'User registered successfully', userId: newUserId });
@@ -254,9 +303,12 @@ app.get('/api/users/:id', async (req: Request, res: Response) => {
       .input('userId', sql.Int, req.params.id)
       .query(`
         SELECT u.UserId, u.Email, u.FirstName, u.LastName, u.IsActive, u.CreatedDate, u.UpdatedDate,
-               r.RoleName, r.RoleId
+               r.RoleName, r.RoleId,
+               sp.PhoneNumber, sp.StreetAddress, sp.City, sp.State, sp.ZipCode, sp.Country,
+               sp.UniversityName, sp.Specialization, sp.GraduationYear, sp.CGPA, sp.Bio, sp.Skills
         FROM Users u
         JOIN UserRoles r ON u.RoleId = r.RoleId
+        LEFT JOIN StudentProfiles sp ON u.UserId = sp.UserId
         WHERE u.UserId = @userId
       `);
 
@@ -273,11 +325,14 @@ app.get('/api/users/:id', async (req: Request, res: Response) => {
 // Admin: Update user
 app.put('/api/users/:id', async (req: Request, res: Response) => {
   try {
-    const { firstName, lastName, roleId, isActive } = req.body;
+    const { firstName, lastName, roleId, isActive, phoneNumber, streetAddress, city, state, zipCode, country,
+            universityName, specialization, graduationYear, cgpa, bio, skills } = req.body;
+    const userId = req.params.id;
 
+    // Update Users table
     const request = new sql.Request(pool);
     await request
-      .input('userId', sql.Int, req.params.id)
+      .input('userId', sql.Int, userId)
       .input('firstName', sql.VarChar, firstName)
       .input('lastName', sql.VarChar, lastName)
       .input('roleId', sql.Int, roleId)
@@ -287,6 +342,46 @@ app.put('/api/users/:id', async (req: Request, res: Response) => {
         SET FirstName = @firstName, LastName = @lastName, RoleId = @roleId, IsActive = @isActive, UpdatedDate = GETDATE()
         WHERE UserId = @userId
       `);
+
+    // Update StudentProfiles if student contact/profile info provided
+    if (phoneNumber !== undefined || streetAddress !== undefined || city !== undefined || 
+        state !== undefined || zipCode !== undefined || country !== undefined ||
+        universityName !== undefined || specialization !== undefined || graduationYear !== undefined ||
+        cgpa !== undefined || bio !== undefined || skills !== undefined) {
+      
+      const profileRequest = new sql.Request(pool);
+      await profileRequest
+        .input('userId', sql.Int, userId)
+        .input('phoneNumber', sql.VarChar(20), phoneNumber || null)
+        .input('streetAddress', sql.VarChar(255), streetAddress || null)
+        .input('city', sql.VarChar(100), city || null)
+        .input('state', sql.VarChar(100), state || null)
+        .input('zipCode', sql.VarChar(20), zipCode || null)
+        .input('country', sql.VarChar(100), country || null)
+        .input('universityName', sql.VarChar(255), universityName || null)
+        .input('specialization', sql.VarChar(100), specialization || null)
+        .input('graduationYear', sql.Int, graduationYear || null)
+        .input('cgpa', sql.Decimal(3, 2), cgpa || null)
+        .input('bio', sql.Text, bio || null)
+        .input('skills', sql.VarChar(sql.MAX), skills || null)
+        .query(`
+          UPDATE StudentProfiles 
+          SET PhoneNumber = COALESCE(@phoneNumber, PhoneNumber),
+              StreetAddress = COALESCE(@streetAddress, StreetAddress),
+              City = COALESCE(@city, City),
+              State = COALESCE(@state, State),
+              ZipCode = COALESCE(@zipCode, ZipCode),
+              Country = COALESCE(@country, Country),
+              UniversityName = COALESCE(@universityName, UniversityName),
+              Specialization = COALESCE(@specialization, Specialization),
+              GraduationYear = COALESCE(@graduationYear, GraduationYear),
+              CGPA = COALESCE(@cgpa, CGPA),
+              Bio = COALESCE(@bio, Bio),
+              Skills = COALESCE(@skills, Skills),
+              UpdatedDate = GETDATE()
+          WHERE UserId = @userId
+        `);
+    }
 
     res.status(200).json({ message: 'User updated successfully' });
   } catch (error) {

@@ -9,18 +9,52 @@ const PORT = process.env.JOB_SERVICE_PORT || 3002;
 
 app.use(express.json());
 
+// Parse connection string if provided (for Azure deployment)
+function parseConnectionString(connStr: string): sql.config {
+  const params: Record<string, string> = {};
+  connStr.split(';').forEach(part => {
+    const [key, ...valueParts] = part.split('=');
+    if (key && valueParts.length > 0) {
+      params[key.trim().toLowerCase()] = valueParts.join('=').trim();
+    }
+  });
+  
+  let server = params['server'] || 'localhost';
+  let port = 1433;
+  if (server.startsWith('tcp:')) server = server.substring(4);
+  if (server.includes(',')) {
+    const [host, portStr] = server.split(',');
+    server = host;
+    port = parseInt(portStr) || 1433;
+  }
+  
+  return {
+    user: params['user id'] || params['uid'] || 'sa',
+    password: params['password'] || params['pwd'] || '',
+    server: server,
+    database: params['database'] || params['initial catalog'] || 'ContosoCivilApp',
+    port: port,
+    options: {
+      encrypt: params['encrypt']?.toLowerCase() === 'true',
+      trustServerCertificate: params['trustservercertificate']?.toLowerCase() === 'true',
+    },
+  };
+}
+
 // SQL Server Configuration
-const sqlConfig: sql.config = {
-  user: process.env.DB_USER || 'sa',
-  password: process.env.DB_PASSWORD || 'YourSQLPassword123!',
-  server: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'ContosoCivilApp',
-  port: parseInt(process.env.DB_PORT || '1433'),
-  options: {
-    encrypt: true,
-    trustServerCertificate: true,
-  },
-};
+const sqlConfig: sql.config = process.env.DB_CONNECTION_STRING
+  ? parseConnectionString(process.env.DB_CONNECTION_STRING)
+  : {
+      user: process.env.DB_USER || 'sa',
+      password: process.env.DB_PASSWORD || 'YourSQLPassword123!',
+      server: process.env.DB_HOST || 'localhost',
+      database: process.env.DB_NAME || 'ContosoCivilApp',
+      port: parseInt(process.env.DB_PORT || '1433'),
+      options: {
+        encrypt: true,
+        trustServerCertificate: true,
+      },
+    };
 
 let pool: sql.ConnectionPool;
 

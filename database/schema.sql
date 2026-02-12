@@ -62,6 +62,12 @@ BEGIN
     ResumeFileName VARCHAR(255),
     Bio TEXT,
     Skills VARCHAR(MAX),
+    PhoneNumber VARCHAR(20),
+    StreetAddress VARCHAR(255),
+    City VARCHAR(100),
+    State VARCHAR(100),
+    ZipCode VARCHAR(20),
+    Country VARCHAR(100) DEFAULT 'United States',
     CreatedDate DATETIME DEFAULT GETDATE(),
     UpdatedDate DATETIME DEFAULT GETDATE(),
     FOREIGN KEY (UserId) REFERENCES Users(UserId) ON DELETE CASCADE

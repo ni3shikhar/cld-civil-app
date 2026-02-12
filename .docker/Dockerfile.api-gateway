@@ -14,7 +14,7 @@ RUN npm install --prefix ./backend/api-gateway
 COPY backend/api-gateway ./backend/api-gateway
 
 # Build TypeScript
-RUN npm run build --prefix ./backend/api-gateway
+RUN cd ./backend/api-gateway && node ./node_modules/typescript/bin/tsc
 
 EXPOSE 3000
 
