@@ -63,6 +63,32 @@ jobs:
           echo "environment=$ENV" >> $GITHUB_OUTPUT
           echo "resource_group=${{ secrets.RESOURCE_GROUP }}" >> $GITHUB_OUTPUT
 
+      - name: Validate Required Secrets
+        env:
+          SQL_PWD: ${{ secrets.SQL_ADMIN_PASSWORD }}
+          SQL_LOGIN: ${{ secrets.SQL_ADMIN_LOGIN }}
+          JWT: ${{ secrets.JWT_SECRET }}
+        run: |
+          echo "Validating required secrets..."
+          echo "SQL_ADMIN_PASSWORD length: ${#SQL_PWD}"
+          echo "SQL_ADMIN_LOGIN length: ${#SQL_LOGIN}"
+          echo "JWT_SECRET length: ${#JWT}"
+          
+          if [ -z "$SQL_PWD" ] || [ ${#SQL_PWD} -lt 8 ]; then
+            echo "::error::SQL_ADMIN_PASSWORD is missing or too short (min 8 chars)"
+            exit 1
+          fi
+          
+          if [ -z "$SQL_LOGIN" ]; then
+            echo "::warning::SQL_ADMIN_LOGIN not set, will use default 'sqladmin'"
+          fi
+          
+          if [ -z "$JWT" ]; then
+            echo "::warning::JWT_SECRET not set"
+          fi
+          
+          echo "Secrets validation passed"
+
       - name: Create Resource Group
         run: |
           az group create \
@@ -75,12 +101,19 @@ jobs:
         env:
           SQL_ADMIN_PASSWORD: ${{ secrets.SQL_ADMIN_PASSWORD }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          SQL_ADMIN_LOGIN: ${{ secrets.SQL_ADMIN_LOGIN }}
+          SQL_ADMIN_LOGIN_INPUT: ${{ secrets.SQL_ADMIN_LOGIN }}
           DEPLOY_ENV: ${{ steps.env.outputs.environment }}
           DEPLOY_RG: ${{ secrets.RESOURCE_GROUP }}
           DEPLOY_LOCATION: ${{ env.LOCATION }}
           RUN_ID: ${{ github.run_id }}
         run: |
+          # Use default login if not set
+          SQL_ADMIN_LOGIN="${SQL_ADMIN_LOGIN_INPUT:-sqladmin}"
+          
+          # Debug: print password length (not value)
+          echo "Password length: ${#SQL_ADMIN_PASSWORD}"
+          echo "Login: $SQL_ADMIN_LOGIN"
+          
           # Create parameters JSON file to handle special characters
           cat > params.json << 'PARAMS_EOF'
           {
