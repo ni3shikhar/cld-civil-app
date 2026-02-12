@@ -6,7 +6,7 @@
 param environment string = 'dev'
 
 @description('Location for all resources')
-param location string = resourceGroup().location
+param location string = 'westus2'
 
 @description('SQL Server administrator login')
 param sqlAdminLogin string = 'sqladmin'
