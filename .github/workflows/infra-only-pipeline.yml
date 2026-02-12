@@ -10,7 +10,6 @@ on:
 
 env:
   BICEP_FILE: infra/main.bicep
-  PARAMS_FILE: infra/main.bicepparam
 
 jobs:
   validate:
@@ -31,12 +30,18 @@ jobs:
           az bicep version
 
       - name: What-If (preview)
+        env:
+          SQL_ADMIN_PASSWORD: ${{ secrets.SQL_ADMIN_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
         run: |
           az deployment group what-if \
             --resource-group "${{ secrets.RESOURCE_GROUP }}" \
             --template-file "$BICEP_FILE" \
-            --parameters @"$PARAMS_FILE" \
-            --output json
+            --parameters environment=dev \
+            --parameters location=eastus \
+            --parameters sqlAdminLogin=sqladmin \
+            --parameters sqlAdminPassword="$SQL_ADMIN_PASSWORD" \
+            --parameters jwtSecret="$JWT_SECRET"
 
   deploy:
     name: Deploy infra
@@ -58,9 +63,15 @@ jobs:
           az bicep install
 
       - name: Deploy Bicep
+        env:
+          SQL_ADMIN_PASSWORD: ${{ secrets.SQL_ADMIN_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
         run: |
           az deployment group create \
             --resource-group "${{ secrets.RESOURCE_GROUP }}" \
             --template-file "$BICEP_FILE" \
-            --parameters @"$PARAMS_FILE" \
-            --output json
+            --parameters environment=dev \
+            --parameters location=eastus \
+            --parameters sqlAdminLogin=sqladmin \
+            --parameters sqlAdminPassword="$SQL_ADMIN_PASSWORD" \
+            --parameters jwtSecret="$JWT_SECRET"
