@@ -186,15 +186,24 @@ jobs:
 
       - name: Update Container Apps
         run: |
-          SERVICES=("user-service" "job-service" "interview-service" "application-service" "api-gateway" "frontend")
+          # Container app names must match Bicep template (prefix='civil')
+          declare -A APP_IMAGES=(
+            ["civil-user-service"]="user-service"
+            ["civil-job-service"]="job-service"
+            ["civil-interview-service"]="interview-service"
+            ["civil-app-svc"]="application-service"
+            ["civil-api-gateway"]="api-gateway"
+            ["civil-frontend"]="frontend"
+          )
           
-          for service in "${SERVICES[@]}"; do
-            echo "Updating contoso-civil-$service..."
+          for app_name in "${!APP_IMAGES[@]}"; do
+            image_name="${APP_IMAGES[$app_name]}"
+            echo "Updating $app_name with image $image_name..."
             az containerapp update \
-              --name "contoso-civil-$service" \
+              --name "$app_name" \
               --resource-group ${{ secrets.RESOURCE_GROUP }} \
-              --image "${{ secrets.ACR_LOGIN_SERVER }}/$service:${{ github.sha }}" \
-              --output none || echo "Warning: Failed to update $service"
+              --image "${{ secrets.ACR_LOGIN_SERVER }}/$image_name:${{ github.sha }}" \
+              --output none || echo "Warning: Failed to update $app_name"
           done
 
       - name: Display Deployment URLs
