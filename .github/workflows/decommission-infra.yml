@@ -57,76 +57,102 @@ jobs:
         run: |
           echo "Deleting resources in resource group: ${{ secrets.RESOURCE_GROUP }}"
           
-          # Get deployment name from bicep (uses 'main' by default)
-          DEPLOYMENT_NAME="main"
-          
           # List resources created by the deployment
-          echo "Listing resources to delete..."
+          echo "=== Listing all resources to delete ==="
           az resource list \
             --resource-group "${{ secrets.RESOURCE_GROUP }}" \
-            --query "[].{name:name, type:type, id:id}" \
+            --query "[].{name:name, type:type}" \
             -o table
           
           # Delete resources in reverse dependency order
-          # 1. Delete App Services
-          echo "Deleting App Services..."
-          az webapp list -g "${{ secrets.RESOURCE_GROUP }}" --query "[].name" -o tsv | while read app; do
+          
+          # 1. Delete Container Apps (must be deleted before environment)
+          echo "=== Deleting Container Apps ==="
+          for app in $(az containerapp list -g "${{ secrets.RESOURCE_GROUP }}" --query "[].name" -o tsv 2>/dev/null); do
+            echo "Deleting container app: $app"
+            az containerapp delete -g "${{ secrets.RESOURCE_GROUP }}" -n "$app" --yes 2>/dev/null || true
+          done
+          
+          # 2. Delete Container Apps Environment
+          echo "=== Deleting Container Apps Environments ==="
+          for env in $(az containerapp env list -g "${{ secrets.RESOURCE_GROUP }}" --query "[].name" -o tsv 2>/dev/null); do
+            echo "Deleting container apps environment: $env"
+            az containerapp env delete -g "${{ secrets.RESOURCE_GROUP }}" -n "$env" --yes 2>/dev/null || true
+          done
+          
+          # 3. Delete Container Registry
+          echo "=== Deleting Container Registries ==="
+          for acr in $(az acr list -g "${{ secrets.RESOURCE_GROUP }}" --query "[].name" -o tsv 2>/dev/null); do
+            echo "Deleting container registry: $acr"
+            az acr delete -g "${{ secrets.RESOURCE_GROUP }}" -n "$acr" --yes 2>/dev/null || true
+          done
+          
+          # 4. Delete App Services
+          echo "=== Deleting App Services ==="
+          for app in $(az webapp list -g "${{ secrets.RESOURCE_GROUP }}" --query "[].name" -o tsv 2>/dev/null); do
             echo "Deleting webapp: $app"
-            az webapp delete -g "${{ secrets.RESOURCE_GROUP }}" -n "$app" --keep-empty-plan || true
+            az webapp delete -g "${{ secrets.RESOURCE_GROUP }}" -n "$app" --keep-empty-plan 2>/dev/null || true
           done
           
-          # 2. Delete App Service Plans
-          echo "Deleting App Service Plans..."
-          az appservice plan list -g "${{ secrets.RESOURCE_GROUP }}" --query "[].name" -o tsv | while read plan; do
+          # 5. Delete App Service Plans
+          echo "=== Deleting App Service Plans ==="
+          for plan in $(az appservice plan list -g "${{ secrets.RESOURCE_GROUP }}" --query "[].name" -o tsv 2>/dev/null); do
             echo "Deleting plan: $plan"
-            az appservice plan delete -g "${{ secrets.RESOURCE_GROUP }}" -n "$plan" --yes || true
+            az appservice plan delete -g "${{ secrets.RESOURCE_GROUP }}" -n "$plan" --yes 2>/dev/null || true
           done
           
-          # 3. Delete SQL Databases (before server)
-          echo "Deleting SQL Databases..."
-          az sql server list -g "${{ secrets.RESOURCE_GROUP }}" --query "[].name" -o tsv | while read server; do
-            az sql db list -g "${{ secrets.RESOURCE_GROUP }}" -s "$server" --query "[?name!='master'].name" -o tsv | while read db; do
+          # 6. Delete SQL Databases (before server)
+          echo "=== Deleting SQL Databases ==="
+          for server in $(az sql server list -g "${{ secrets.RESOURCE_GROUP }}" --query "[].name" -o tsv 2>/dev/null); do
+            for db in $(az sql db list -g "${{ secrets.RESOURCE_GROUP }}" -s "$server" --query "[?name!='master'].name" -o tsv 2>/dev/null); do
               echo "Deleting database: $db on server: $server"
-              az sql db delete -g "${{ secrets.RESOURCE_GROUP }}" -s "$server" -n "$db" --yes || true
+              az sql db delete -g "${{ secrets.RESOURCE_GROUP }}" -s "$server" -n "$db" --yes 2>/dev/null || true
             done
           done
           
-          # 4. Delete SQL Servers
-          echo "Deleting SQL Servers..."
-          az sql server list -g "${{ secrets.RESOURCE_GROUP }}" --query "[].name" -o tsv | while read server; do
+          # 7. Delete SQL Servers
+          echo "=== Deleting SQL Servers ==="
+          for server in $(az sql server list -g "${{ secrets.RESOURCE_GROUP }}" --query "[].name" -o tsv 2>/dev/null); do
             echo "Deleting SQL server: $server"
-            az sql server delete -g "${{ secrets.RESOURCE_GROUP }}" -n "$server" --yes || true
+            az sql server delete -g "${{ secrets.RESOURCE_GROUP }}" -n "$server" --yes 2>/dev/null || true
           done
           
-          # 5. Delete Storage Accounts
-          echo "Deleting Storage Accounts..."
-          az storage account list -g "${{ secrets.RESOURCE_GROUP }}" --query "[].name" -o tsv | while read storage; do
+          # 8. Delete Storage Accounts
+          echo "=== Deleting Storage Accounts ==="
+          for storage in $(az storage account list -g "${{ secrets.RESOURCE_GROUP }}" --query "[].name" -o tsv 2>/dev/null); do
             echo "Deleting storage: $storage"
-            az storage account delete -g "${{ secrets.RESOURCE_GROUP }}" -n "$storage" --yes || true
+            az storage account delete -g "${{ secrets.RESOURCE_GROUP }}" -n "$storage" --yes 2>/dev/null || true
           done
           
-          # 6. Delete Key Vaults (with purge protection consideration)
-          echo "Deleting Key Vaults..."
-          az keyvault list -g "${{ secrets.RESOURCE_GROUP }}" --query "[].name" -o tsv | while read kv; do
+          # 9. Delete Key Vaults (with purge protection consideration)
+          echo "=== Deleting Key Vaults ==="
+          for kv in $(az keyvault list -g "${{ secrets.RESOURCE_GROUP }}" --query "[].name" -o tsv 2>/dev/null); do
             echo "Deleting keyvault: $kv"
-            az keyvault delete -g "${{ secrets.RESOURCE_GROUP }}" -n "$kv" || true
+            az keyvault delete -g "${{ secrets.RESOURCE_GROUP }}" -n "$kv" 2>/dev/null || true
           done
           
-          # 7. Delete Application Insights
-          echo "Deleting Application Insights..."
-          az monitor app-insights component list -g "${{ secrets.RESOURCE_GROUP }}" --query "[].name" -o tsv 2>/dev/null | while read ai; do
+          # 10. Delete Application Insights
+          echo "=== Deleting Application Insights ==="
+          for ai in $(az monitor app-insights component list -g "${{ secrets.RESOURCE_GROUP }}" --query "[].name" -o tsv 2>/dev/null); do
             echo "Deleting app insights: $ai"
-            az monitor app-insights component delete -g "${{ secrets.RESOURCE_GROUP }}" -a "$ai" --yes || true
-          done 2>/dev/null || true
+            az monitor app-insights component delete -g "${{ secrets.RESOURCE_GROUP }}" -a "$ai" --yes 2>/dev/null || true
+          done
           
-          # 8. Delete Log Analytics Workspaces
-          echo "Deleting Log Analytics Workspaces..."
-          az monitor log-analytics workspace list -g "${{ secrets.RESOURCE_GROUP }}" --query "[].name" -o tsv 2>/dev/null | while read ws; do
+          # 11. Delete Log Analytics Workspaces
+          echo "=== Deleting Log Analytics Workspaces ==="
+          for ws in $(az monitor log-analytics workspace list -g "${{ secrets.RESOURCE_GROUP }}" --query "[].name" -o tsv 2>/dev/null); do
             echo "Deleting workspace: $ws"
-            az monitor log-analytics workspace delete -g "${{ secrets.RESOURCE_GROUP }}" -n "$ws" --yes || true
-          done 2>/dev/null || true
+            az monitor log-analytics workspace delete -g "${{ secrets.RESOURCE_GROUP }}" -n "$ws" --yes --force 2>/dev/null || true
+          done
           
-          echo "Resource deletion completed"
+          # 12. Delete any remaining resources by type
+          echo "=== Cleaning up remaining resources ==="
+          for id in $(az resource list -g "${{ secrets.RESOURCE_GROUP }}" --query "[].id" -o tsv 2>/dev/null); do
+            echo "Deleting resource: $id"
+            az resource delete --ids "$id" 2>/dev/null || true
+          done
+          
+          echo "=== Resource deletion completed ==="
 
       - name: List remaining resources
         if: ${{ github.event.inputs.delete_resource_group == 'false' }}
