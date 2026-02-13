@@ -116,7 +116,7 @@ const AdminDashboard: React.FC = () => {
   const [questionFilter, setQuestionFilter] = useState({ search: '', domain: '', difficulty: '', status: '' });
   const [jobFilter, setJobFilter] = useState({ search: '', domain: '', status: '' });
   const [userFilter, setUserFilter] = useState({ search: '', role: '', status: '' });
-  const [rateFilter, setRateFilter] = useState({ search: '', status: '' });
+  const [rateFilter, setRateFilter] = useState({ search: '', status: '', plan: '' });
 
   const [newQuestion, setNewQuestion] = useState({
     civilDomain: 'Structural',
@@ -171,9 +171,11 @@ const AdminDashboard: React.FC = () => {
       r.FirstName?.toLowerCase().includes(rateFilter.search.toLowerCase()) ||
       r.LastName?.toLowerCase().includes(rateFilter.search.toLowerCase());
     const matchesStatus = !rateFilter.status || 
-      (rateFilter.status === 'Active' ? (r.Status === 'Active' && r.IsAdminEnabled) : 
-       rateFilter.status === 'Disabled' ? !r.IsAdminEnabled : r.Status === rateFilter.status);
-    return matchesSearch && matchesStatus;
+      (rateFilter.status === 'active' ? (r.Status === 'Active' && r.IsAdminEnabled) : 
+       rateFilter.status === 'disabled' ? !r.IsAdminEnabled : 
+       rateFilter.status === 'inactive' ? r.Status !== 'Active' : true);
+    const matchesPlan = !rateFilter.plan || r.PlanName === rateFilter.plan;
+    return matchesSearch && matchesStatus && matchesPlan;
   });
 
   useEffect(() => {
@@ -387,7 +389,7 @@ const AdminDashboard: React.FC = () => {
               <h3 style={{ margin: '0 0 0.5rem 0', color: '#7B1FA2' }}>Rate Analysis</h3>
               <p style={{ fontSize: '2rem', fontWeight: 'bold', margin: '0' }}>{rateSummary?.TotalSubscriptions || 0}</p>
               <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.9rem', color: '#666' }}>
-                Active: {rateSummary?.ActiveSubscriptions || 0} | Disabled: {rateSummary?.DisabledByAdmin || 0}
+                Active: {rateSummary?.ActiveSubscriptions || 0} | Disabled: {rateSummary?.DisabledSubscriptions || 0}
               </p>
             </div>
           </div>
@@ -658,7 +660,7 @@ const AdminDashboard: React.FC = () => {
             </div>
             <div style={{ padding: '1.5rem', backgroundColor: '#fff3e0', borderRadius: '8px' }}>
               <h3 style={{ margin: '0 0 0.5rem 0', color: '#E65100' }}>Disabled by Admin</h3>
-              <p style={{ fontSize: '2rem', fontWeight: 'bold', margin: '0' }}>{rateSummary?.DisabledByAdmin || 0}</p>
+              <p style={{ fontSize: '2rem', fontWeight: 'bold', margin: '0' }}>{rateSummary?.DisabledSubscriptions || 0}</p>
             </div>
           </div>
 
@@ -707,19 +709,19 @@ const AdminDashboard: React.FC = () => {
                     </span>
                   </td>
                   <td style={{ padding: '0.75rem', textAlign: 'center', borderBottom: '1px solid #eee' }}>
-                    <span style={{ color: sub.IsActive && !sub.DisabledByAdmin ? '#4CAF50' : '#f44336' }}>
-                      {sub.DisabledByAdmin ? 'Disabled' : sub.IsActive ? 'Active' : 'Inactive'}
+                    <span style={{ color: sub.Status === 'Active' && sub.IsAdminEnabled ? '#4CAF50' : '#f44336' }}>
+                      {!sub.IsAdminEnabled ? 'Disabled' : sub.Status === 'Active' ? 'Active' : 'Inactive'}
                     </span>
                   </td>
-                  <td style={{ padding: '0.75rem', textAlign: 'center', borderBottom: '1px solid #eee' }}>{new Date(sub.SubscribedDate).toLocaleDateString()}</td>
+                  <td style={{ padding: '0.75rem', textAlign: 'center', borderBottom: '1px solid #eee' }}>{new Date(sub.StartDate).toLocaleDateString()}</td>
                   <td style={{ padding: '0.75rem', textAlign: 'center', borderBottom: '1px solid #eee' }}>
                     <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                      <input type="checkbox" checked={!sub.DisabledByAdmin} onChange={() => handleRateAccessToggle(sub.SubscriptionId, !sub.DisabledByAdmin)} style={{ cursor: 'pointer', width: '18px', height: '18px' }} />
-                      <span style={{ fontSize: '0.8rem', color: sub.DisabledByAdmin ? '#f44336' : '#4CAF50' }}>{sub.DisabledByAdmin ? 'Disabled' : 'Enabled'}</span>
+                      <input type="checkbox" checked={sub.IsAdminEnabled} onChange={() => handleRateAccessToggle(sub.SubscriptionId, sub.IsAdminEnabled)} style={{ cursor: 'pointer', width: '18px', height: '18px' }} />
+                      <span style={{ fontSize: '0.8rem', color: !sub.IsAdminEnabled ? '#f44336' : '#4CAF50' }}>{!sub.IsAdminEnabled ? 'Disabled' : 'Enabled'}</span>
                     </label>
                   </td>
                   <td style={{ padding: '0.75rem', textAlign: 'center', borderBottom: '1px solid #eee' }}>
-                    {sub.DisabledByAdmin ? (
+                    {!sub.IsAdminEnabled ? (
                       <button onClick={() => handleGrantRateAccess(sub.SubscriptionId)} style={{ padding: '0.25rem 0.5rem', backgroundColor: '#4CAF50', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Grant Access</button>
                     ) : (
                       <button onClick={() => handleRevokeRateAccess(sub.SubscriptionId)} style={{ padding: '0.25rem 0.5rem', backgroundColor: '#f44336', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Revoke Access</button>
