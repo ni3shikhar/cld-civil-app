@@ -7,6 +7,14 @@ import { authService } from '../services/api';
 // Civil Engineering Industry News Data
 const civilIndustryNews = [
   {
+    id: 0,
+    title: '📊 NEW: Rate Analysis Feature Coming Soon!',
+    summary: 'Access comprehensive civil engineering rate data including material costs, labor rates, and equipment pricing. Subscribe now for free access!',
+    date: 'Coming Soon',
+    category: 'New Feature',
+    icon: '📊'
+  },
+  {
     id: 1,
     title: 'Infrastructure Bill Allocates $550B for Transportation Projects',
     summary: 'The new infrastructure legislation provides unprecedented funding for bridges, highways, and public transit systems across the nation.',
@@ -63,7 +71,8 @@ const getCategoryColor = (category: string) => {
     'Sustainability': '#388E3C',
     'Careers': '#F57C00',
     'Innovation': '#0097A7',
-    'Standards': '#5D4037'
+    'Standards': '#5D4037',
+    'New Feature': '#9C27B0'
   };
   return colors[category] || '#757575';
 };

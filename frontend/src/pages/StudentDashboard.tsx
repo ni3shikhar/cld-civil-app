@@ -187,6 +187,41 @@ const StudentDashboard: React.FC = () => {
     <div className="dashboard-container" style={{ maxWidth: '1200px', margin: '0 auto' }}>
       <h1 style={{ marginBottom: '1rem' }}>Student Dashboard</h1>
       
+      {/* Rate Analysis Coming Soon Banner */}
+      <div style={{
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        borderRadius: '12px',
+        padding: '1.5rem 2rem',
+        marginBottom: '1.5rem',
+        color: 'white',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: '1rem',
+        boxShadow: '0 4px 15px rgba(102, 126, 234, 0.3)'
+      }}>
+        <div style={{ flex: '1', minWidth: '250px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+            <span style={{ fontSize: '1.5rem' }}>📊</span>
+            <span style={{ fontSize: '0.75rem', backgroundColor: 'rgba(255,255,255,0.2)', padding: '0.25rem 0.75rem', borderRadius: '20px', fontWeight: '600' }}>COMING SOON</span>
+          </div>
+          <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.4rem', fontWeight: '700' }}>Rate Analysis Feature</h3>
+          <p style={{ margin: 0, fontSize: '0.95rem', opacity: 0.9 }}>Access comprehensive civil engineering rate data, material costs, and labor rates to help you prepare for your career.</p>
+        </div>
+        <a href="/rate-analysis" style={{
+          backgroundColor: 'white',
+          color: '#667eea',
+          padding: '0.75rem 1.5rem',
+          borderRadius: '8px',
+          textDecoration: 'none',
+          fontWeight: '600',
+          fontSize: '0.95rem',
+          transition: 'transform 0.2s',
+          whiteSpace: 'nowrap'
+        }}>Learn More →</a>
+      </div>
+
       {/* Tab Navigation */}
       <div className="dashboard-tabs">
         <button 
