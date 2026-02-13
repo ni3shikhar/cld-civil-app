@@ -426,12 +426,26 @@ jobs:
 
       - name: Build and Push Images
         if: github.event.inputs.build_images == 'true'
+        env:
+          RESOURCE_GROUP: ${{ secrets.RESOURCE_GROUP }}
         run: |
           echo "Building and pushing images to $ACR_SERVER"
           
-          # Build and push frontend
+          # Get API Gateway URL for frontend build
+          API_GATEWAY_URL=$(az containerapp show -n civil-api-gateway -g "$RESOURCE_GROUP" --query "properties.configuration.ingress.fqdn" -o tsv 2>/dev/null || echo "")
+          if [ -n "$API_GATEWAY_URL" ]; then
+            API_BASE_URL="https://${API_GATEWAY_URL}/api"
+          else
+            API_BASE_URL="http://localhost:3000/api"
+          fi
+          echo "Frontend will use API: $API_BASE_URL"
+          
+          # Build and push frontend (with API URL baked in)
           echo "Building frontend..."
-          docker build -f .docker/Dockerfile.frontend -t $ACR_SERVER/frontend:$IMAGE_TAG -t $ACR_SERVER/frontend:latest .
+          docker build -f .docker/Dockerfile.frontend \
+            --build-arg REACT_APP_API_BASE_URL="$API_BASE_URL" \
+            -t $ACR_SERVER/frontend:$IMAGE_TAG \
+            -t $ACR_SERVER/frontend:latest .
           docker push $ACR_SERVER/frontend:$IMAGE_TAG
           docker push $ACR_SERVER/frontend:latest
           
