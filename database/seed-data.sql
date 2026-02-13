@@ -7,13 +7,19 @@ GO
 -- DEMO ACCOUNTS
 -- All demo accounts use password: Password123!
 -- Bcrypt hash for 'Password123!' (10 rounds)
+-- Generated with: bcrypt.hash('Password123!', 10)
 -- =====================================================
+
+-- First, update existing demo accounts with correct password hash
+UPDATE Users SET PasswordHash = '$2a$10$M0W46eG4TE0FuplEUIhz8O7NIhISt749sGd1EqNegfHrFvuNdzWL.'
+WHERE Email IN ('admin@contoso.com', 'student@university.edu', 'employer@acmecivil.com');
+GO
 
 -- Insert Admin user (password: Password123!)
 IF NOT EXISTS (SELECT * FROM Users WHERE Email = 'admin@contoso.com')
 BEGIN
   INSERT INTO Users (Email, PasswordHash, FirstName, LastName, RoleId, IsActive)
-  VALUES ('admin@contoso.com', '$2a$10$rPQvGHNwT3YqZ5K8X9q5aOJ8f6vN3mZ5L2W1D4R7E9Y0P3Q6U8T1V', 'Admin', 'User', 3, 1);
+  VALUES ('admin@contoso.com', '$2a$10$M0W46eG4TE0FuplEUIhz8O7NIhISt749sGd1EqNegfHrFvuNdzWL.', 'Admin', 'User', 3, 1);
 END
 GO
 
@@ -21,7 +27,7 @@ GO
 IF NOT EXISTS (SELECT * FROM Users WHERE Email = 'student@university.edu')
 BEGIN
   INSERT INTO Users (Email, PasswordHash, FirstName, LastName, RoleId, IsActive)
-  VALUES ('student@university.edu', '$2a$10$rPQvGHNwT3YqZ5K8X9q5aOJ8f6vN3mZ5L2W1D4R7E9Y0P3Q6U8T1V', 'Jane', 'Doe', 1, 1);
+  VALUES ('student@university.edu', '$2a$10$M0W46eG4TE0FuplEUIhz8O7NIhISt749sGd1EqNegfHrFvuNdzWL.', 'Jane', 'Doe', 1, 1);
 END
 GO
 
@@ -42,7 +48,7 @@ GO
 IF NOT EXISTS (SELECT * FROM Users WHERE Email = 'employer@acmecivil.com')
 BEGIN
   INSERT INTO Users (Email, PasswordHash, FirstName, LastName, RoleId, IsActive)
-  VALUES ('employer@acmecivil.com', '$2a$10$rPQvGHNwT3YqZ5K8X9q5aOJ8f6vN3mZ5L2W1D4R7E9Y0P3Q6U8T1V', 'John', 'Smith', 2, 1);
+  VALUES ('employer@acmecivil.com', '$2a$10$M0W46eG4TE0FuplEUIhz8O7NIhISt749sGd1EqNegfHrFvuNdzWL.', 'John', 'Smith', 2, 1);
 END
 GO
 
