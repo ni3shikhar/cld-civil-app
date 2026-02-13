@@ -229,9 +229,20 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Login to ACR
+        env:
+          RESOURCE_GROUP: ${{ secrets.RESOURCE_GROUP }}
         run: |
-          echo "Logging into ACR: $ACR_LOGIN_SERVER"
-          az acr login --name $(echo $ACR_LOGIN_SERVER | cut -d'.' -f1)
+          # Get ACR login server from output or query Azure
+          if [ -n "$ACR_LOGIN_SERVER" ]; then
+            ACR_SERVER="$ACR_LOGIN_SERVER"
+          else
+            echo "ACR output empty, querying Azure..."
+            ACR_SERVER=$(az acr list -g "$RESOURCE_GROUP" --query "[0].loginServer" -o tsv)
+          fi
+          
+          echo "Logging into ACR: $ACR_SERVER"
+          echo "ACR_SERVER=$ACR_SERVER" >> $GITHUB_ENV
+          az acr login --name $(echo $ACR_SERVER | cut -d'.' -f1)
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -240,26 +251,26 @@ jobs:
 
       - name: Build and Push Images
         run: |
-          echo "Building and pushing images to $ACR_LOGIN_SERVER"
+          echo "Building and pushing images to $ACR_SERVER"
           
           # Build and push frontend
           echo "Building frontend..."
-          docker build -f .docker/Dockerfile.frontend -t $ACR_LOGIN_SERVER/frontend:$IMAGE_TAG -t $ACR_LOGIN_SERVER/frontend:latest .
-          docker push $ACR_LOGIN_SERVER/frontend:$IMAGE_TAG
-          docker push $ACR_LOGIN_SERVER/frontend:latest
+          docker build -f .docker/Dockerfile.frontend -t $ACR_SERVER/frontend:$IMAGE_TAG -t $ACR_SERVER/frontend:latest .
+          docker push $ACR_SERVER/frontend:$IMAGE_TAG
+          docker push $ACR_SERVER/frontend:latest
           
           # Build and push api-gateway
           echo "Building api-gateway..."
-          docker build -f .docker/Dockerfile.api-gateway -t $ACR_LOGIN_SERVER/api-gateway:$IMAGE_TAG -t $ACR_LOGIN_SERVER/api-gateway:latest .
-          docker push $ACR_LOGIN_SERVER/api-gateway:$IMAGE_TAG
-          docker push $ACR_LOGIN_SERVER/api-gateway:latest
+          docker build -f .docker/Dockerfile.api-gateway -t $ACR_SERVER/api-gateway:$IMAGE_TAG -t $ACR_SERVER/api-gateway:latest .
+          docker push $ACR_SERVER/api-gateway:$IMAGE_TAG
+          docker push $ACR_SERVER/api-gateway:latest
           
           # Build and push backend services
           for service in user-service job-service interview-service application-service; do
             echo "Building $service..."
-            docker build -f .docker/Dockerfile.services --build-arg SERVICE_NAME=$service -t $ACR_LOGIN_SERVER/$service:$IMAGE_TAG -t $ACR_LOGIN_SERVER/$service:latest .
-            docker push $ACR_LOGIN_SERVER/$service:$IMAGE_TAG
-            docker push $ACR_LOGIN_SERVER/$service:latest
+            docker build -f .docker/Dockerfile.services --build-arg SERVICE_NAME=$service -t $ACR_SERVER/$service:$IMAGE_TAG -t $ACR_SERVER/$service:latest .
+            docker push $ACR_SERVER/$service:$IMAGE_TAG
+            docker push $ACR_SERVER/$service:latest
           done
 
       - name: Update Container Apps
@@ -280,7 +291,7 @@ jobs:
             az containerapp update \
               --name "$app_name" \
               --resource-group "${{ secrets.RESOURCE_GROUP }}" \
-              --image "$ACR_LOGIN_SERVER/$image_name:$IMAGE_TAG" \
+              --image "$ACR_SERVER/$image_name:$IMAGE_TAG" \
               --output none || echo "Warning: Failed to update $app_name"
           done
 
