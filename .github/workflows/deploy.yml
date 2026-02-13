@@ -207,8 +207,7 @@ jobs:
           az sql server firewall-rule delete \
             -g "$RESOURCE_GROUP" \
             -s "$SQL_SERVER_NAME" \
-            -n "GitHubRunner-${{ github.run_id }}" \
-            --yes
+            -n "GitHubRunner-${{ github.run_id }}"
 
   deploy-containers:
     name: Build & Deploy Container Apps
