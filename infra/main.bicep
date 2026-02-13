@@ -370,6 +370,59 @@ resource applicationService 'Microsoft.App/containerApps@2023-05-01' = {
   }
 }
 
+// Rate Analysis Service Container App
+resource rateAnalysisService 'Microsoft.App/containerApps@2023-05-01' = {
+  name: '${prefix}-rate-analysis'
+  location: location
+  properties: {
+    managedEnvironmentId: containerAppsEnvironment.id
+    configuration: {
+      ingress: {
+        external: false
+        targetPort: 3005
+        transport: 'http'
+      }
+      registries: [
+        {
+          server: containerRegistry.properties.loginServer
+          username: containerRegistry.listCredentials().username
+          passwordSecretRef: 'acr-password'
+        }
+      ]
+      secrets: [
+        {
+          name: 'acr-password'
+          value: containerRegistry.listCredentials().passwords[0].value
+        }
+        {
+          name: 'sql-connection'
+          value: sqlConnectionString
+        }
+      ]
+    }
+    template: {
+      containers: [
+        {
+          name: 'rate-analysis-service'
+          image: placeholderImage  // Update via CI/CD after build
+          resources: {
+            cpu: json('0.25')
+            memory: '0.5Gi'
+          }
+          env: [
+            { name: 'PORT', value: '3005' }
+            { name: 'DB_CONNECTION_STRING', secretRef: 'sql-connection' }
+          ]
+        }
+      ]
+      scale: {
+        minReplicas: 1
+        maxReplicas: 3
+      }
+    }
+  }
+}
+
 // API Gateway Container App (External facing)
 resource apiGateway 'Microsoft.App/containerApps@2023-05-01' = {
   name: '${prefix}-api-gateway'
@@ -420,6 +473,7 @@ resource apiGateway 'Microsoft.App/containerApps@2023-05-01' = {
             { name: 'JOB_SERVICE_URL', value: 'http://${prefix}-job-service' }
             { name: 'INTERVIEW_SERVICE_URL', value: 'http://${prefix}-interview-service' }
             { name: 'APPLICATION_SERVICE_URL', value: 'http://${prefix}-app-svc' }
+            { name: 'RATE_ANALYSIS_SERVICE_URL', value: 'http://${prefix}-rate-analysis' }
             { name: 'JWT_SECRET', secretRef: 'jwt-secret' }
           ]
         }
@@ -435,6 +489,7 @@ resource apiGateway 'Microsoft.App/containerApps@2023-05-01' = {
     jobService
     interviewService
     applicationService
+    rateAnalysisService
   ]
 }
 

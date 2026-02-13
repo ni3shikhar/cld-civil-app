@@ -456,7 +456,7 @@ jobs:
           docker push $ACR_SERVER/api-gateway:latest
           
           # Build and push backend services
-          for service in user-service job-service interview-service application-service; do
+          for service in user-service job-service interview-service application-service rate-analysis-service; do
             echo "Building $service..."
             docker build -f .docker/Dockerfile.services --build-arg SERVICE_NAME=$service -t $ACR_SERVER/$service:$IMAGE_TAG -t $ACR_SERVER/$service:latest .
             docker push $ACR_SERVER/$service:$IMAGE_TAG
@@ -472,6 +472,7 @@ jobs:
             ["civil-job-service"]="job-service"
             ["civil-interview-service"]="interview-service"
             ["civil-app-svc"]="application-service"
+            ["civil-rate-analysis"]="rate-analysis-service"
             ["civil-api-gateway"]="api-gateway"
             ["civil-frontend"]="frontend"
           )

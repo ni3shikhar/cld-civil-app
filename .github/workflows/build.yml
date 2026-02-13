@@ -51,6 +51,7 @@ jobs:
           cd ../job-service && npm ci
           cd ../interview-service && npm ci
           cd ../application-service && npm ci
+          cd ../rate-analysis-service && npm ci
 
       - name: TypeScript Compile Check
         run: |
@@ -59,6 +60,7 @@ jobs:
           cd ../services/job-service && npx tsc --noEmit
           cd ../services/interview-service && npx tsc --noEmit
           cd ../services/application-service && npx tsc --noEmit
+          cd ../rate-analysis-service && npx tsc --noEmit
         continue-on-error: true
 
   build-images:
@@ -113,6 +115,12 @@ jobs:
           docker build -f .docker/Dockerfile.services --build-arg SERVICE_NAME=application-service -t $REGISTRY/application-service:$IMAGE_TAG -t $REGISTRY/application-service:latest .
           docker push $REGISTRY/application-service:$IMAGE_TAG
           docker push $REGISTRY/application-service:latest
+
+      - name: Build and Push Rate Analysis Service
+        run: |
+          docker build -f .docker/Dockerfile.services --build-arg SERVICE_NAME=rate-analysis-service -t $REGISTRY/rate-analysis-service:$IMAGE_TAG -t $REGISTRY/rate-analysis-service:latest .
+          docker push $REGISTRY/rate-analysis-service:$IMAGE_TAG
+          docker push $REGISTRY/rate-analysis-service:latest
 
       - name: Upload Infrastructure Artifacts
         uses: actions/upload-artifact@v4
