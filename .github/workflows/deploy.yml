@@ -20,17 +20,32 @@ on:
           - staging
           - prod
       deploy_infra:
-        description: 'Deploy infrastructure'
+        description: '1. Deploy infrastructure (Bicep)'
         required: false
         default: true
         type: boolean
       deploy_database:
-        description: 'Initialize database schema'
+        description: '2. Initialize database schema'
         required: false
         default: false
         type: boolean
       seed_database:
-        description: 'Load seed data into database'
+        description: '3. Load seed data into database'
+        required: false
+        default: false
+        type: boolean
+      build_images:
+        description: '4. Build and push container images'
+        required: false
+        default: true
+        type: boolean
+      deploy_containers:
+        description: '5. Update container apps with new images'
+        required: false
+        default: true
+        type: boolean
+      skip_approval:
+        description: 'Skip approval gate (for dev/testing)'
         required: false
         default: false
         type: boolean
@@ -56,10 +71,14 @@ jobs:
         id: set-env
         run: |
           ENV="${{ github.event.inputs.environment || 'dev' }}"
+          SKIP_APPROVAL="${{ github.event.inputs.skip_approval }}"
           echo "environment=$ENV" >> $GITHUB_OUTPUT
           
-          # Staging and prod require approval
-          if [ "$ENV" == "staging" ] || [ "$ENV" == "prod" ]; then
+          # Staging and prod require approval unless skip_approval is true
+          if [ "$SKIP_APPROVAL" == "true" ]; then
+            echo "requires_approval=false" >> $GITHUB_OUTPUT
+            echo "::notice::Approval gate skipped by user request"
+          elif [ "$ENV" == "staging" ] || [ "$ENV" == "prod" ]; then
             echo "requires_approval=true" >> $GITHUB_OUTPUT
           else
             echo "requires_approval=false" >> $GITHUB_OUTPUT
@@ -69,12 +88,20 @@ jobs:
         run: |
           echo "## Deployment Validation" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Deployment Steps" >> $GITHUB_STEP_SUMMARY
+          echo "| Step | Enabled |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|---------|" >> $GITHUB_STEP_SUMMARY
+          echo "| 1. Deploy Infrastructure | ${{ github.event.inputs.deploy_infra || 'true' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 2. Initialize Database Schema | ${{ github.event.inputs.deploy_database || 'false' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 3. Seed Database | ${{ github.event.inputs.seed_database || 'false' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 4. Build Container Images | ${{ github.event.inputs.build_images || 'true' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 5. Deploy Container Apps | ${{ github.event.inputs.deploy_containers || 'true' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Configuration" >> $GITHUB_STEP_SUMMARY
           echo "| Setting | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|---------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| Environment | ${{ github.event.inputs.environment || 'dev' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Deploy Infrastructure | ${{ github.event.inputs.deploy_infra || 'true' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Deploy Database Schema | ${{ github.event.inputs.deploy_database || 'false' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Seed Database | ${{ github.event.inputs.seed_database || 'false' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Skip Approval | ${{ github.event.inputs.skip_approval || 'false' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Triggered By | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Branch | ${{ github.ref_name }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Commit | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
@@ -359,6 +386,8 @@ jobs:
     name: Build & Deploy Container Apps
     runs-on: ubuntu-latest
     needs: [validate-deployment, deploy-infrastructure]
+    # Only run if build_images or deploy_containers is enabled
+    if: github.event.inputs.build_images != 'false' || github.event.inputs.deploy_containers != 'false'
     environment: ${{ needs.validate-deployment.outputs.environment }}
     
     env:
@@ -396,6 +425,7 @@ jobs:
           node-version: '18'
 
       - name: Build and Push Images
+        if: github.event.inputs.build_images != 'false'
         run: |
           echo "Building and pushing images to $ACR_SERVER"
           
@@ -420,6 +450,7 @@ jobs:
           done
 
       - name: Update Container Apps
+        if: github.event.inputs.deploy_containers != 'false'
         run: |
           # Container app names must match Bicep template (prefix='civil')
           declare -A APP_IMAGES=(
