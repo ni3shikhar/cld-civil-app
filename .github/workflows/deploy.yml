@@ -40,11 +40,74 @@ env:
   LOCATION: 'westus2'
 
 jobs:
+  # =====================================================
+  # VALIDATION & APPROVAL
+  # =====================================================
+  validate-deployment:
+    name: Validate Deployment
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch'
+    outputs:
+      environment: ${{ steps.set-env.outputs.environment }}
+      requires_approval: ${{ steps.set-env.outputs.requires_approval }}
+    
+    steps:
+      - name: Set Environment
+        id: set-env
+        run: |
+          ENV="${{ github.event.inputs.environment || 'dev' }}"
+          echo "environment=$ENV" >> $GITHUB_OUTPUT
+          
+          # Staging and prod require approval
+          if [ "$ENV" == "staging" ] || [ "$ENV" == "prod" ]; then
+            echo "requires_approval=true" >> $GITHUB_OUTPUT
+          else
+            echo "requires_approval=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Deployment Summary
+        run: |
+          echo "## Deployment Validation" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Setting | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment | ${{ github.event.inputs.environment || 'dev' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Deploy Infrastructure | ${{ github.event.inputs.deploy_infra || 'true' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Deploy Database Schema | ${{ github.event.inputs.deploy_database || 'false' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Seed Database | ${{ github.event.inputs.seed_database || 'false' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Triggered By | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Branch | ${{ github.ref_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
+
+  approval-gate:
+    name: Approval Gate
+    runs-on: ubuntu-latest
+    needs: validate-deployment
+    # Use environment with required reviewers for staging/prod
+    environment: 
+      name: ${{ needs.validate-deployment.outputs.environment }}-approval
+    # Only require approval for staging/prod
+    if: needs.validate-deployment.outputs.requires_approval == 'true'
+    
+    steps:
+      - name: Approval Confirmed
+        run: |
+          echo "## ✅ Deployment Approved" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Approved by: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "Environment: ${{ needs.validate-deployment.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "Time: $(date -u)" >> $GITHUB_STEP_SUMMARY
+
+  # =====================================================
+  # INFRASTRUCTURE DEPLOYMENT
+  # =====================================================
   deploy-infrastructure:
     name: Deploy Infrastructure
     runs-on: ubuntu-latest
-    if: github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch'
-    environment: ${{ github.event.inputs.environment || 'dev' }}
+    needs: [validate-deployment, approval-gate]
+    # Run if approval passed OR if approval wasn't required (dev environment)
+    if: always() && needs.validate-deployment.result == 'success' && (needs.approval-gate.result == 'success' || needs.approval-gate.result == 'skipped')
+    environment: ${{ needs.validate-deployment.outputs.environment }}
     
     env:
       SQL_ADMIN_PASSWORD: ${{ secrets.SQL_ADMIN_PASSWORD }}
@@ -295,8 +358,8 @@ jobs:
   deploy-containers:
     name: Build & Deploy Container Apps
     runs-on: ubuntu-latest
-    needs: deploy-infrastructure
-    environment: ${{ github.event.inputs.environment || 'dev' }}
+    needs: [validate-deployment, deploy-infrastructure]
+    environment: ${{ needs.validate-deployment.outputs.environment }}
     
     env:
       ACR_LOGIN_SERVER: ${{ needs.deploy-infrastructure.outputs.acr_login_server }}
@@ -390,7 +453,7 @@ jobs:
   notify:
     name: Notify Deployment Status
     runs-on: ubuntu-latest
-    needs: [deploy-infrastructure, deploy-containers]
+    needs: [validate-deployment, approval-gate, deploy-infrastructure, deploy-containers]
     if: always()
     
     steps:
@@ -398,8 +461,12 @@ jobs:
         run: |
           echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ needs.validate-deployment.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Stage | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Validation | ${{ needs.validate-deployment.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Approval | ${{ needs.approval-gate.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Infrastructure | ${{ needs.deploy-infrastructure.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Container Apps | ${{ needs.deploy-containers.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
