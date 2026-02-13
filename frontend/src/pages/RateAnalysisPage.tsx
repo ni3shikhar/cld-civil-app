@@ -45,9 +45,54 @@ interface RateItem {
   CategoryName: string;
 }
 
+interface CompositeItem {
+  CompositeItemId: number;
+  ItemCode: string;
+  ItemName: string;
+  Description: string;
+  Unit: string;
+  UnitOfMeasure: string;
+  TotalRate: number;
+  CivilDomain: string;
+  CategoryName: string;
+}
+
+interface UserJob {
+  JobId: number;
+  UserId: number;
+  JobName: string;
+  JobDescription: string;
+  ClientName: string;
+  ProjectLocation: string;
+  Status: string;
+  TotalMaterialCost: number;
+  TotalLaborCost: number;
+  TotalMachineryCost: number;
+  TotalOverheadCost: number;
+  GrandTotal: number;
+  EstimatedStartDate: string;
+  EstimatedEndDate: string;
+  CreatedDate: string;
+  items?: JobItem[];
+}
+
+interface JobItem {
+  JobItemId: number;
+  CompositeItemId: number;
+  Quantity: number;
+  CalculatedTotal: number;
+  TotalCost: number;
+  ItemCode: string;
+  ItemName: string;
+  Unit: string;
+  UnitOfMeasure: string;
+  UnitRate: number;
+  Notes: string;
+}
+
 const RateAnalysisPage: React.FC = () => {
   const { userId, role } = useAppSelector((state) => state.auth);
-  const [activeTab, setActiveTab] = useState<'rates' | 'subscription'>('rates');
+  const [activeTab, setActiveTab] = useState<'rates' | 'jobs' | 'subscription'>('rates');
   
   // Subscription state
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -58,11 +103,25 @@ const RateAnalysisPage: React.FC = () => {
   // Rate data state
   const [categories, setCategories] = useState<Category[]>([]);
   const [rateItems, setRateItems] = useState<RateItem[]>([]);
+  const [compositeItems, setCompositeItems] = useState<CompositeItem[]>([]);
   const [loadingRates, setLoadingRates] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDomain, setSelectedDomain] = useState('');
   const [selectedItem, setSelectedItem] = useState<RateItem | null>(null);
+  
+  // Job state
+  const [userJobs, setUserJobs] = useState<UserJob[]>([]);
+  const [loadingJobs, setLoadingJobs] = useState(false);
+  const [showJobModal, setShowJobModal] = useState(false);
+  const [showJobDetailModal, setShowJobDetailModal] = useState(false);
+  const [showAddItemModal, setShowAddItemModal] = useState(false);
+  const [selectedJob, setSelectedJob] = useState<UserJob | null>(null);
+  const [editingJob, setEditingJob] = useState<UserJob | null>(null);
+  const [jobForm, setJobForm] = useState({
+    jobName: '', jobDescription: '', clientName: '', projectLocation: '', estimatedStartDate: '', estimatedEndDate: ''
+  });
+  const [addItemForm, setAddItemForm] = useState({ compositeItemId: 0, quantity: 1, notes: '' });
   
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -80,6 +139,8 @@ const RateAnalysisPage: React.FC = () => {
     if (hasActiveSubscription) {
       loadCategories();
       loadRateItems();
+      loadCompositeItems();
+      loadUserJobs();
     }
   }, [hasActiveSubscription, selectedCategory, selectedDomain]);
 
@@ -129,6 +190,132 @@ const RateAnalysisPage: React.FC = () => {
     } finally {
       setLoadingRates(false);
     }
+  };
+
+  const loadCompositeItems = async () => {
+    try {
+      const response = await rateAnalysisService.getCompositeItems();
+      setCompositeItems(response.data);
+    } catch (error) {
+      console.error('Failed to load composite items:', error);
+    }
+  };
+
+  const loadUserJobs = async () => {
+    try {
+      setLoadingJobs(true);
+      const response = await rateAnalysisService.getUserJobs(userId!);
+      setUserJobs(response.data);
+    } catch (error) {
+      console.error('Failed to load user jobs:', error);
+    } finally {
+      setLoadingJobs(false);
+    }
+  };
+
+  const handleCreateJob = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setError('');
+      await rateAnalysisService.createUserJob({ ...jobForm, userId: parseInt(userId!) });
+      setSuccess('Job created successfully!');
+      setShowJobModal(false);
+      resetJobForm();
+      loadUserJobs();
+    } catch (error: any) {
+      setError(error.response?.data?.error || 'Failed to create job');
+    }
+  };
+
+  const handleUpdateJob = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingJob) return;
+    try {
+      setError('');
+      await rateAnalysisService.updateUserJob(editingJob.JobId, { ...jobForm, status: editingJob.Status });
+      setSuccess('Job updated successfully!');
+      setShowJobModal(false);
+      setEditingJob(null);
+      resetJobForm();
+      loadUserJobs();
+    } catch (error: any) {
+      setError(error.response?.data?.error || 'Failed to update job');
+    }
+  };
+
+  const handleDeleteJob = async (jobId: number) => {
+    if (!window.confirm('Are you sure you want to delete this job? All items will be removed.')) return;
+    try {
+      await rateAnalysisService.deleteUserJob(jobId);
+      setSuccess('Job deleted successfully!');
+      loadUserJobs();
+    } catch (error: any) {
+      setError(error.response?.data?.error || 'Failed to delete job');
+    }
+  };
+
+  const viewJobDetail = async (job: UserJob) => {
+    try {
+      const response = await rateAnalysisService.getUserJob(userId!, job.JobId);
+      setSelectedJob(response.data);
+      setShowJobDetailModal(true);
+    } catch (error: any) {
+      setError('Failed to load job details');
+    }
+  };
+
+  const handleAddJobItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedJob) return;
+    try {
+      setError('');
+      await rateAnalysisService.addJobItem(selectedJob.JobId, addItemForm);
+      setSuccess('Item added to job!');
+      setShowAddItemModal(false);
+      setAddItemForm({ compositeItemId: 0, quantity: 1, notes: '' });
+      // Refresh job details
+      const response = await rateAnalysisService.getUserJob(userId!, selectedJob.JobId);
+      setSelectedJob(response.data);
+      loadUserJobs();
+    } catch (error: any) {
+      setError(error.response?.data?.error || 'Failed to add item');
+    }
+  };
+
+  const handleRemoveJobItem = async (itemId: number) => {
+    if (!selectedJob) return;
+    if (!window.confirm('Remove this item from the job?')) return;
+    try {
+      await rateAnalysisService.removeJobItem(selectedJob.JobId, itemId);
+      setSuccess('Item removed from job');
+      // Refresh job details
+      const response = await rateAnalysisService.getUserJob(userId!, selectedJob.JobId);
+      setSelectedJob(response.data);
+      loadUserJobs();
+    } catch (error: any) {
+      setError(error.response?.data?.error || 'Failed to remove item');
+    }
+  };
+
+  const resetJobForm = () => {
+    setJobForm({ jobName: '', jobDescription: '', clientName: '', projectLocation: '', estimatedStartDate: '', estimatedEndDate: '' });
+  };
+
+  const openEditJobModal = (job: UserJob) => {
+    setEditingJob(job);
+    setJobForm({
+      jobName: job.JobName,
+      jobDescription: job.JobDescription || '',
+      clientName: job.ClientName || '',
+      projectLocation: job.ProjectLocation || '',
+      estimatedStartDate: job.EstimatedStartDate ? job.EstimatedStartDate.split('T')[0] : '',
+      estimatedEndDate: job.EstimatedEndDate ? job.EstimatedEndDate.split('T')[0] : ''
+    });
+    setShowJobModal(true);
+  };
+
+  const formatINR = (amount: number) => {
+    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
   };
 
   const handleSubscribe = async (planId: number) => {
@@ -225,6 +412,20 @@ const RateAnalysisPage: React.FC = () => {
         >
           Rate Data
         </button>
+        {hasActiveSubscription && (
+          <button
+            onClick={() => setActiveTab('jobs')}
+            className="dashboard-tab"
+            style={{
+              backgroundColor: activeTab === 'jobs' ? '#1976D2' : 'transparent',
+              color: activeTab === 'jobs' ? 'white' : '#333',
+              borderBottom: activeTab === 'jobs' ? '3px solid #1976D2' : '3px solid transparent',
+              fontWeight: activeTab === 'jobs' ? 600 : 400
+            }}
+          >
+            My Jobs
+          </button>
+        )}
         <button
           onClick={() => setActiveTab('subscription')}
           className="dashboard-tab"
@@ -393,6 +594,325 @@ const RateAnalysisPage: React.FC = () => {
             </div>
           )}
         </>
+      )}
+
+      {/* Jobs Tab */}
+      {activeTab === 'jobs' && hasActiveSubscription && (
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+            <h2 style={{ margin: 0 }}>📋 My Cost Estimation Jobs</h2>
+            <button
+              onClick={() => { setEditingJob(null); resetJobForm(); setShowJobModal(true); }}
+              style={{
+                padding: '0.75rem 1.5rem',
+                backgroundColor: '#1976D2',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              + Create New Job
+            </button>
+          </div>
+
+          {loadingJobs ? (
+            <div style={{ textAlign: 'center', padding: '2rem' }}>Loading jobs...</div>
+          ) : userJobs.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '3rem', backgroundColor: '#f5f5f5', borderRadius: '12px' }}>
+              <h3 style={{ color: '#666' }}>No jobs yet</h3>
+              <p style={{ color: '#888' }}>Create your first cost estimation job to get started</p>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gap: '1rem' }}>
+              {userJobs.map(job => (
+                <div key={job.JobId} style={{
+                  backgroundColor: 'white',
+                  padding: '1.5rem',
+                  borderRadius: '12px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                  border: '1px solid #eee'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+                    <div style={{ flex: 1 }}>
+                      <h3 style={{ margin: 0, color: '#333' }}>{job.JobName}</h3>
+                      {job.JobDescription && <p style={{ margin: '0.5rem 0 0 0', color: '#666', fontSize: '0.9rem' }}>{job.JobDescription}</p>}
+                      <div style={{ display: 'flex', gap: '2rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
+                        {job.ClientName && <span style={{ color: '#888', fontSize: '0.85rem' }}>👤 {job.ClientName}</span>}
+                        {job.ProjectLocation && <span style={{ color: '#888', fontSize: '0.85rem' }}>📍 {job.ProjectLocation}</span>}
+                        <span style={{ color: '#888', fontSize: '0.85rem' }}>📅 {new Date(job.CreatedDate).toLocaleDateString()}</span>
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#1976D2' }}>
+                        {formatINR(job.GrandTotal || 0)}
+                      </div>
+                      <span style={{
+                        display: 'inline-block',
+                        marginTop: '0.5rem',
+                        padding: '0.25rem 0.75rem',
+                        borderRadius: '12px',
+                        fontSize: '0.8rem',
+                        fontWeight: 500,
+                        backgroundColor: job.Status === 'Completed' ? '#e8f5e9' : job.Status === 'In Progress' ? '#e3f2fd' : '#f5f5f5',
+                        color: job.Status === 'Completed' ? '#2e7d32' : job.Status === 'In Progress' ? '#1976D2' : '#666'
+                      }}>
+                        {job.Status}
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', borderTop: '1px solid #eee', paddingTop: '1rem' }}>
+                    <button
+                      onClick={() => viewJobDetail(job)}
+                      style={{ padding: '0.5rem 1rem', backgroundColor: '#e3f2fd', color: '#1976D2', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 500 }}
+                    >
+                      View Details
+                    </button>
+                    <button
+                      onClick={() => openEditJobModal(job)}
+                      style={{ padding: '0.5rem 1rem', backgroundColor: '#fff3e0', color: '#e65100', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 500 }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeleteJob(job.JobId)}
+                      style={{ padding: '0.5rem 1rem', backgroundColor: '#ffebee', color: '#c62828', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 500 }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Job Create/Edit Modal */}
+      {showJobModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '2rem', width: '90%', maxWidth: '500px', maxHeight: '90vh', overflow: 'auto' }}>
+            <h2 style={{ margin: '0 0 1.5rem 0' }}>{editingJob ? 'Edit Job' : 'Create New Job'}</h2>
+            <form onSubmit={editingJob ? handleUpdateJob : handleCreateJob}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Job Name *</label>
+                <input
+                  type="text"
+                  value={jobForm.jobName}
+                  onChange={e => setJobForm({ ...jobForm, jobName: e.target.value })}
+                  required
+                  style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #ddd', fontSize: '1rem' }}
+                />
+              </div>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Description</label>
+                <textarea
+                  value={jobForm.jobDescription}
+                  onChange={e => setJobForm({ ...jobForm, jobDescription: e.target.value })}
+                  rows={3}
+                  style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #ddd', fontSize: '1rem', resize: 'vertical' }}
+                />
+              </div>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Client Name</label>
+                <input
+                  type="text"
+                  value={jobForm.clientName}
+                  onChange={e => setJobForm({ ...jobForm, clientName: e.target.value })}
+                  style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #ddd', fontSize: '1rem' }}
+                />
+              </div>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Project Location</label>
+                <input
+                  type="text"
+                  value={jobForm.projectLocation}
+                  onChange={e => setJobForm({ ...jobForm, projectLocation: e.target.value })}
+                  style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #ddd', fontSize: '1rem' }}
+                />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Estimated Start</label>
+                  <input
+                    type="date"
+                    value={jobForm.estimatedStartDate}
+                    onChange={e => setJobForm({ ...jobForm, estimatedStartDate: e.target.value })}
+                    style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #ddd', fontSize: '1rem' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Estimated End</label>
+                  <input
+                    type="date"
+                    value={jobForm.estimatedEndDate}
+                    onChange={e => setJobForm({ ...jobForm, estimatedEndDate: e.target.value })}
+                    style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #ddd', fontSize: '1rem' }}
+                  />
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  onClick={() => { setShowJobModal(false); setEditingJob(null); resetJobForm(); }}
+                  style={{ padding: '0.75rem 1.5rem', backgroundColor: '#f5f5f5', color: '#666', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={{ padding: '0.75rem 1.5rem', backgroundColor: '#1976D2', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+                >
+                  {editingJob ? 'Update Job' : 'Create Job'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Job Detail Modal */}
+      {showJobDetailModal && selectedJob && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '2rem', width: '95%', maxWidth: '800px', maxHeight: '90vh', overflow: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
+              <div>
+                <h2 style={{ margin: 0 }}>{selectedJob.JobName}</h2>
+                {selectedJob.ClientName && <p style={{ margin: '0.5rem 0 0 0', color: '#666' }}>Client: {selectedJob.ClientName}</p>}
+                {selectedJob.ProjectLocation && <p style={{ margin: '0.25rem 0 0 0', color: '#666' }}>Location: {selectedJob.ProjectLocation}</p>}
+              </div>
+              <button
+                onClick={() => { setShowJobDetailModal(false); setSelectedJob(null); }}
+                style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#666' }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ margin: 0 }}>Job Items</h3>
+              <button
+                onClick={() => setShowAddItemModal(true)}
+                style={{ padding: '0.5rem 1rem', backgroundColor: '#1976D2', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 500 }}
+              >
+                + Add Item
+              </button>
+            </div>
+
+            {selectedJob.items && selectedJob.items.length > 0 ? (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#f5f5f5' }}>
+                      <th style={{ padding: '0.75rem', textAlign: 'left', borderBottom: '2px solid #ddd' }}>Item</th>
+                      <th style={{ padding: '0.75rem', textAlign: 'right', borderBottom: '2px solid #ddd' }}>Qty</th>
+                      <th style={{ padding: '0.75rem', textAlign: 'right', borderBottom: '2px solid #ddd' }}>Unit Rate</th>
+                      <th style={{ padding: '0.75rem', textAlign: 'right', borderBottom: '2px solid #ddd' }}>Total</th>
+                      <th style={{ padding: '0.75rem', textAlign: 'center', borderBottom: '2px solid #ddd' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedJob.items.map((item: JobItem) => (
+                      <tr key={item.JobItemId} style={{ borderBottom: '1px solid #eee' }}>
+                        <td style={{ padding: '0.75rem' }}>
+                          <div style={{ fontWeight: 500 }}>{item.ItemName || `Item #${item.CompositeItemId}`}</div>
+                          {item.Notes && <div style={{ fontSize: '0.85rem', color: '#666' }}>{item.Notes}</div>}
+                        </td>
+                        <td style={{ padding: '0.75rem', textAlign: 'right' }}>{item.Quantity} {item.UnitOfMeasure || 'units'}</td>
+                        <td style={{ padding: '0.75rem', textAlign: 'right' }}>{formatINR(item.UnitRate || 0)}</td>
+                        <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600 }}>{formatINR(item.TotalCost || 0)}</td>
+                        <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                          <button
+                            onClick={() => handleRemoveJobItem(item.JobItemId)}
+                            style={{ padding: '0.25rem 0.5rem', backgroundColor: '#ffebee', color: '#c62828', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem' }}
+                          >
+                            Remove
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ backgroundColor: '#e3f2fd' }}>
+                      <td colSpan={3} style={{ padding: '1rem', textAlign: 'right', fontWeight: 600, fontSize: '1.1rem' }}>Grand Total:</td>
+                      <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 700, fontSize: '1.2rem', color: '#1976D2' }}>{formatINR(selectedJob.GrandTotal || 0)}</td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '2rem', backgroundColor: '#f5f5f5', borderRadius: '8px' }}>
+                <p style={{ color: '#666' }}>No items added yet. Add items to calculate job cost.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Add Item to Job Modal */}
+      {showAddItemModal && selectedJob && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1001 }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '2rem', width: '90%', maxWidth: '500px' }}>
+            <h2 style={{ margin: '0 0 1.5rem 0' }}>Add Item to Job</h2>
+            <form onSubmit={handleAddJobItem}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Select Item *</label>
+                <select
+                  value={addItemForm.compositeItemId}
+                  onChange={e => setAddItemForm({ ...addItemForm, compositeItemId: parseInt(e.target.value) })}
+                  required
+                  style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #ddd', fontSize: '1rem' }}
+                >
+                  <option value={0}>-- Select an item --</option>
+                  {compositeItems.map(item => (
+                    <option key={item.CompositeItemId} value={item.CompositeItemId}>
+                      {item.ItemName} ({item.UnitOfMeasure}) - {formatINR(item.TotalRate || 0)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Quantity *</label>
+                <input
+                  type="number"
+                  value={addItemForm.quantity}
+                  onChange={e => setAddItemForm({ ...addItemForm, quantity: parseFloat(e.target.value) || 0 })}
+                  min={0.01}
+                  step={0.01}
+                  required
+                  style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #ddd', fontSize: '1rem' }}
+                />
+              </div>
+              <div style={{ marginBottom: '1.5rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Notes</label>
+                <input
+                  type="text"
+                  value={addItemForm.notes}
+                  onChange={e => setAddItemForm({ ...addItemForm, notes: e.target.value })}
+                  style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #ddd', fontSize: '1rem' }}
+                  placeholder="Optional notes for this item"
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  onClick={() => { setShowAddItemModal(false); setAddItemForm({ compositeItemId: 0, quantity: 1, notes: '' }); }}
+                  style={{ padding: '0.75rem 1.5rem', backgroundColor: '#f5f5f5', color: '#666', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={{ padding: '0.75rem 1.5rem', backgroundColor: '#1976D2', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+                >
+                  Add Item
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* Subscription Tab */}

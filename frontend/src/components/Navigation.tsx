@@ -80,6 +80,16 @@ const Navigation: React.FC = () => {
               >
                 📊 Rate Analysis
               </Link>
+              {auth.role?.toLowerCase() === 'administrator' && (
+                <Link 
+                  to="/admin/rate-config" 
+                  onClick={closeMobileMenu}
+                  className="show-mobile"
+                  style={{ color: 'white', textDecoration: 'none', padding: '0.5rem 0' }}
+                >
+                  ⚙️ Rate Configuration
+                </Link>
+              )}
               <button 
                 onClick={handleLogout}
                 className="show-mobile"
@@ -172,6 +182,17 @@ const Navigation: React.FC = () => {
                     >
                       📊 Rate Analysis
                     </Link>
+                    {auth.role?.toLowerCase() === 'administrator' && (
+                      <Link 
+                        to="/admin/rate-config" 
+                        onClick={() => setShowDropdown(false)}
+                        style={{ display: 'block', padding: '0.75rem 1rem', color: '#333', textDecoration: 'none', borderBottom: '1px solid #eee' }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                      >
+                        ⚙️ Rate Configuration
+                      </Link>
+                    )}
                     <button 
                       onClick={() => { setShowDropdown(false); handleLogout(); }}
                       style={{ width: '100%', padding: '0.75rem 1rem', border: 'none', backgroundColor: 'white', color: '#f44336', textAlign: 'left', cursor: 'pointer' }}

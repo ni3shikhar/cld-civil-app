@@ -112,6 +112,48 @@ export const rateAnalysisService = {
   updateItem: (itemId: string, data: any) => apiClient.put(`/rate-analysis/items/${itemId}`, data),
   deleteItem: (itemId: string) => apiClient.delete(`/rate-analysis/items/${itemId}`),
   createCategory: (data: any) => apiClient.post('/rate-analysis/categories', data),
+  
+  // Admin - Material rates
+  getMaterials: (params?: { categoryId?: number; search?: string }) => 
+    apiClient.get('/rate-analysis/materials', { params }),
+  createMaterial: (data: any) => apiClient.post('/rate-analysis/materials', data),
+  updateMaterial: (materialId: number, data: any) => apiClient.put(`/rate-analysis/materials/${materialId}`, data),
+  deleteMaterial: (materialId: number) => apiClient.delete(`/rate-analysis/materials/${materialId}`),
+  
+  // Admin - Labor rates
+  getLabor: (params?: { skillLevel?: string; search?: string }) => 
+    apiClient.get('/rate-analysis/labor', { params }),
+  createLabor: (data: any) => apiClient.post('/rate-analysis/labor', data),
+  updateLabor: (laborId: number, data: any) => apiClient.put(`/rate-analysis/labor/${laborId}`, data),
+  deleteLabor: (laborId: number) => apiClient.delete(`/rate-analysis/labor/${laborId}`),
+  
+  // Admin - Machinery rates
+  getMachinery: (params?: { machineryType?: string; search?: string }) => 
+    apiClient.get('/rate-analysis/machinery', { params }),
+  createMachinery: (data: any) => apiClient.post('/rate-analysis/machinery', data),
+  updateMachinery: (machineryId: number, data: any) => apiClient.put(`/rate-analysis/machinery/${machineryId}`, data),
+  deleteMachinery: (machineryId: number) => apiClient.delete(`/rate-analysis/machinery/${machineryId}`),
+  
+  // Admin - Composite items
+  getCompositeItems: (params?: { categoryId?: number; search?: string; domain?: string }) => 
+    apiClient.get('/rate-analysis/composite-items', { params }),
+  getAdminCompositeItems: () => apiClient.get('/rate-analysis/admin/composite-items'),
+  getAdminCompositeItem: (itemId: number) => apiClient.get(`/rate-analysis/admin/composite-items/${itemId}`),
+  createCompositeItem: (data: any) => apiClient.post('/rate-analysis/admin/composite-items', data),
+  updateCompositeItem: (itemId: number, data: any) => apiClient.put(`/rate-analysis/admin/composite-items/${itemId}`, data),
+  deleteCompositeItem: (itemId: number) => apiClient.delete(`/rate-analysis/admin/composite-items/${itemId}`),
+  recalculateRates: () => apiClient.post('/rate-analysis/admin/recalculate-rates'),
+  
+  // User jobs
+  getUserJobs: (userId: string, params?: { status?: string }) => 
+    apiClient.get(`/rate-analysis/jobs/${userId}`, { params }),
+  getUserJob: (userId: string, jobId: number) => apiClient.get(`/rate-analysis/jobs/${userId}/${jobId}`),
+  createUserJob: (data: any) => apiClient.post('/rate-analysis/jobs', data),
+  updateUserJob: (jobId: number, data: any) => apiClient.put(`/rate-analysis/jobs/${jobId}`, data),
+  deleteUserJob: (jobId: number) => apiClient.delete(`/rate-analysis/jobs/${jobId}`),
+  addJobItem: (jobId: number, data: any) => apiClient.post(`/rate-analysis/jobs/${jobId}/items`, data),
+  updateJobItem: (jobId: number, itemId: number, data: any) => apiClient.put(`/rate-analysis/jobs/${jobId}/items/${itemId}`, data),
+  removeJobItem: (jobId: number, itemId: number) => apiClient.delete(`/rate-analysis/jobs/${jobId}/items/${itemId}`),
 };
 
 export default apiClient;

@@ -646,7 +646,22 @@ const AdminDashboard: React.FC = () => {
 
       {activeTab === 'rateanalysis' && (
         <div>
-          <h2>Rate Analysis Subscription Management</h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
+            <h2 style={{ margin: 0 }}>Rate Analysis Subscription Management</h2>
+            <a 
+              href="/admin/rate-config" 
+              style={{ 
+                padding: '0.5rem 1rem', 
+                backgroundColor: '#7B1FA2', 
+                color: 'white', 
+                textDecoration: 'none', 
+                borderRadius: '4px',
+                fontWeight: 500
+              }}
+            >
+              ⚙️ Configure Rates
+            </a>
+          </div>
 
           {/* Summary Cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
