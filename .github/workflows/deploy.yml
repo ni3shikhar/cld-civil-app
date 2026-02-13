@@ -194,12 +194,25 @@ jobs:
           # Remove lines 4-10 (DB creation and USE blocks) - connect directly to the database (created by Bicep)
           tail -n +11 database/schema.sql > database/azure-schema.sql
           
+          # Also strip USE statement from seed data (lines 3-4)
+          tail -n +5 database/seed-data.sql > database/azure-seed-data.sql
+          
           # Run schema using SQLCMDPASSWORD env var (avoids shell escaping issues)
+          echo "Running schema..."
           /opt/mssql-tools18/bin/sqlcmd \
             -S "$SQL_SERVER" \
             -U "$SQL_LOGIN" \
             -d ContosoCivilApp \
             -i database/azure-schema.sql \
+            -C -b
+          
+          # Run seed data
+          echo "Running seed data..."
+          /opt/mssql-tools18/bin/sqlcmd \
+            -S "$SQL_SERVER" \
+            -U "$SQL_LOGIN" \
+            -d ContosoCivilApp \
+            -i database/azure-seed-data.sql \
             -C -b
           
           # Clean up firewall rule
