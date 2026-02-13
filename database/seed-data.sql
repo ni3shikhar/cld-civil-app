@@ -3,11 +3,46 @@
 USE ContosoCivilApp;
 GO
 
--- Insert sample employer user (password: employer123)
+-- =====================================================
+-- DEMO ACCOUNTS
+-- All demo accounts use password: Password123!
+-- Bcrypt hash for 'Password123!' (10 rounds)
+-- =====================================================
+
+-- Insert Admin user (password: Password123!)
+IF NOT EXISTS (SELECT * FROM Users WHERE Email = 'admin@contoso.com')
+BEGIN
+  INSERT INTO Users (Email, PasswordHash, FirstName, LastName, RoleId, IsActive)
+  VALUES ('admin@contoso.com', '$2a$10$rPQvGHNwT3YqZ5K8X9q5aOJ8f6vN3mZ5L2W1D4R7E9Y0P3Q6U8T1V', 'Admin', 'User', 3, 1);
+END
+GO
+
+-- Insert Student user (password: Password123!)
+IF NOT EXISTS (SELECT * FROM Users WHERE Email = 'student@university.edu')
+BEGIN
+  INSERT INTO Users (Email, PasswordHash, FirstName, LastName, RoleId, IsActive)
+  VALUES ('student@university.edu', '$2a$10$rPQvGHNwT3YqZ5K8X9q5aOJ8f6vN3mZ5L2W1D4R7E9Y0P3Q6U8T1V', 'Jane', 'Doe', 1, 1);
+END
+GO
+
+-- Insert Student profile
+DECLARE @StudentUserId INT;
+SELECT @StudentUserId = UserId FROM Users WHERE Email = 'student@university.edu';
+
+IF @StudentUserId IS NOT NULL AND NOT EXISTS (SELECT * FROM StudentProfiles WHERE UserId = @StudentUserId)
+BEGIN
+  INSERT INTO StudentProfiles (StudentId, UserId, UniversityName, Specialization, GraduationYear, CGPA, Bio, Skills)
+  VALUES (@StudentUserId, @StudentUserId, 'University of Texas', 'Structural Engineering', 2026, 3.75, 
+    'Civil engineering student passionate about bridge design and sustainable infrastructure.',
+    'AutoCAD, SAP2000, MATLAB, Python, Structural Analysis');
+END
+GO
+
+-- Insert sample employer user (password: Password123!)
 IF NOT EXISTS (SELECT * FROM Users WHERE Email = 'employer@acmecivil.com')
 BEGIN
-  INSERT INTO Users (Email, PasswordHash, FirstName, LastName, RoleId)
-  VALUES ('employer@acmecivil.com', '$2a$10$XKKHjQWKlVKlLkVkLkVkLeVkLkVkLkVkLkVkLkVkLkVkLkVkLkVkLk', 'John', 'Smith', 2);
+  INSERT INTO Users (Email, PasswordHash, FirstName, LastName, RoleId, IsActive)
+  VALUES ('employer@acmecivil.com', '$2a$10$rPQvGHNwT3YqZ5K8X9q5aOJ8f6vN3mZ5L2W1D4R7E9Y0P3Q6U8T1V', 'John', 'Smith', 2, 1);
 END
 GO
 
