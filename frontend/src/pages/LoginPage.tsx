@@ -226,6 +226,23 @@ const LoginPage: React.FC = () => {
             <p style={{ margin: '0.25rem 0', color: '#444' }}>👨‍💼 admin@contoso.com</p>
             <p style={{ marginTop: '0.5rem', color: '#666', fontStyle: 'italic' }}>Password: password123</p>
           </div>
+
+          {/* Rate Analysis Coming Soon Banner */}
+          <div style={{
+            marginTop: '1.5rem',
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            borderRadius: '10px',
+            padding: '1rem 1.25rem',
+            color: 'white',
+            boxShadow: '0 4px 15px rgba(102, 126, 234, 0.3)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+              <span style={{ fontSize: '1.25rem' }}>📊</span>
+              <span style={{ fontSize: '0.7rem', backgroundColor: 'rgba(255,255,255,0.2)', padding: '0.2rem 0.5rem', borderRadius: '12px', fontWeight: '600' }}>NEW FEATURE</span>
+            </div>
+            <h4 style={{ margin: '0 0 0.25rem 0', fontSize: '1rem', fontWeight: '700' }}>Rate Analysis Coming Soon!</h4>
+            <p style={{ margin: 0, fontSize: '0.8rem', opacity: 0.9, lineHeight: '1.4' }}>Access civil engineering rate data, material costs & labor rates.</p>
+          </div>
         </div>
       </div>
 
