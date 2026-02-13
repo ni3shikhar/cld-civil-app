@@ -83,4 +83,35 @@ export const applicationService = {
   updateApplicationStatus: (id: string, status: string) => apiClient.patch(`/applications/${id}/status`, { status }),
 };
 
+export const rateAnalysisService = {
+  // Public
+  getPlans: () => apiClient.get('/rate-analysis/plans'),
+  
+  // User subscription
+  subscribe: (data: { userId: number; planId?: number }) => apiClient.post('/rate-analysis/subscribe', data),
+  getSubscription: (userId: string) => apiClient.get(`/rate-analysis/subscription/${userId}`),
+  unsubscribe: (userId: string) => apiClient.post(`/rate-analysis/unsubscribe/${userId}`),
+  
+  // Rate data (requires active subscription)
+  getCategories: () => apiClient.get('/rate-analysis/categories'),
+  getItems: (params?: { categoryId?: number; search?: string; domain?: string }) => 
+    apiClient.get('/rate-analysis/items', { params }),
+  getItemById: (itemId: string) => apiClient.get(`/rate-analysis/items/${itemId}`),
+  
+  // Admin - Subscription management
+  getAllSubscriptions: () => apiClient.get('/rate-analysis/admin/subscriptions'),
+  getSubscriptionSummary: () => apiClient.get('/rate-analysis/admin/summary'),
+  enableAccess: (subscriptionId: number, isEnabled: boolean) => 
+    apiClient.patch(`/rate-analysis/admin/subscription/${subscriptionId}/access`, { isEnabled }),
+  grantAccess: (data: { userId: number; planId?: number; durationDays?: number }) => 
+    apiClient.post('/rate-analysis/admin/grant-access', data),
+  revokeAccess: (userId: number) => apiClient.post(`/rate-analysis/admin/revoke-access/${userId}`),
+  
+  // Admin - Rate data management
+  createItem: (data: any) => apiClient.post('/rate-analysis/items', data),
+  updateItem: (itemId: string, data: any) => apiClient.put(`/rate-analysis/items/${itemId}`, data),
+  deleteItem: (itemId: string) => apiClient.delete(`/rate-analysis/items/${itemId}`),
+  createCategory: (data: any) => apiClient.post('/rate-analysis/categories', data),
+};
+
 export default apiClient;

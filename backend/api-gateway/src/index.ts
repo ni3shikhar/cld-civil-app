@@ -8,6 +8,7 @@ import userRoutes from './routes/userRoutes';
 import jobRoutes from './routes/jobRoutes';
 import interviewRoutes from './routes/interviewRoutes';
 import applicationRoutes from './routes/applicationRoutes';
+import rateAnalysisRoutes from './routes/rateAnalysisRoutes';
 
 dotenv.config();
 
@@ -31,6 +32,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/jobs', jobRoutes);
 app.use('/api/questions', interviewRoutes);
 app.use('/api/applications', applicationRoutes);
+app.use('/api/rate-analysis', rateAnalysisRoutes);
 
 // Error handling middleware
 app.use((err: any, req: Request, res: Response, next: any) => {

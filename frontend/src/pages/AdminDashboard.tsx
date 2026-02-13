@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAppSelector } from '../hooks';
-import { questionService, jobService, userService } from '../services/api';
+import { questionService, jobService, userService, rateAnalysisService } from '../services/api';
 
 interface Question {
   QuestionId: number;
@@ -72,9 +72,31 @@ interface UserSummary {
   ActiveUsers: number;
 }
 
+interface RateSubscription {
+  SubscriptionId: number;
+  UserId: number;
+  PlanId: number;
+  StartDate: string;
+  EndDate: string;
+  Status: string;
+  IsAdminEnabled: boolean;
+  Email: string;
+  FirstName: string;
+  LastName: string;
+  PlanName: string;
+  Price: number;
+}
+
+interface RateSummary {
+  TotalSubscriptions: number;
+  ActiveSubscriptions: number;
+  CancelledSubscriptions: number;
+  DisabledSubscriptions: number;
+}
+
 const AdminDashboard: React.FC = () => {
   const { userId } = useAppSelector((state) => state.auth);
-  const [activeTab, setActiveTab] = useState<'overview' | 'questions' | 'jobs' | 'users'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'questions' | 'jobs' | 'users' | 'rateanalysis'>('overview');
   const [questions, setQuestions] = useState<Question[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -82,6 +104,8 @@ const AdminDashboard: React.FC = () => {
   const [jobSummary, setJobSummary] = useState<JobSummary | null>(null);
   const [locationSummary, setLocationSummary] = useState<LocationSummary[]>([]);
   const [userSummary, setUserSummary] = useState<UserSummary | null>(null);
+  const [rateSubscriptions, setRateSubscriptions] = useState<RateSubscription[]>([]);
+  const [rateSummary, setRateSummary] = useState<RateSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -92,6 +116,7 @@ const AdminDashboard: React.FC = () => {
   const [questionFilter, setQuestionFilter] = useState({ search: '', domain: '', difficulty: '', status: '' });
   const [jobFilter, setJobFilter] = useState({ search: '', domain: '', status: '' });
   const [userFilter, setUserFilter] = useState({ search: '', role: '', status: '' });
+  const [rateFilter, setRateFilter] = useState({ search: '', status: '' });
 
   const [newQuestion, setNewQuestion] = useState({
     civilDomain: 'Structural',
@@ -140,6 +165,17 @@ const AdminDashboard: React.FC = () => {
     return matchesSearch && matchesRole && matchesStatus;
   });
 
+  const filteredRateSubscriptions = rateSubscriptions.filter(r => {
+    const matchesSearch = !rateFilter.search || 
+      r.Email?.toLowerCase().includes(rateFilter.search.toLowerCase()) ||
+      r.FirstName?.toLowerCase().includes(rateFilter.search.toLowerCase()) ||
+      r.LastName?.toLowerCase().includes(rateFilter.search.toLowerCase());
+    const matchesStatus = !rateFilter.status || 
+      (rateFilter.status === 'Active' ? (r.Status === 'Active' && r.IsAdminEnabled) : 
+       rateFilter.status === 'Disabled' ? !r.IsAdminEnabled : r.Status === rateFilter.status);
+    return matchesSearch && matchesStatus;
+  });
+
   useEffect(() => {
     fetchAllData();
   }, []);
@@ -163,6 +199,18 @@ const AdminDashboard: React.FC = () => {
       setLocationSummary(jLocRes.data);
       setUsers(uRes.data);
       setUserSummary(uSumRes.data);
+      
+      // Fetch rate analysis data (separate try-catch to not block other data)
+      try {
+        const [rateSubRes, rateSumRes] = await Promise.all([
+          rateAnalysisService.getAllSubscriptions(),
+          rateAnalysisService.getSubscriptionSummary()
+        ]);
+        setRateSubscriptions(rateSubRes.data);
+        setRateSummary(rateSumRes.data);
+      } catch (rateErr) {
+        console.error('Rate analysis data not available:', rateErr);
+      }
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to load data');
     } finally {
@@ -253,6 +301,37 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
+  const handleRateAccessToggle = async (subscriptionId: number, currentEnabled: boolean) => {
+    try {
+      await rateAnalysisService.enableAccess(subscriptionId, !currentEnabled);
+      setSuccess(`Rate Analysis access ${!currentEnabled ? 'enabled' : 'disabled'} successfully!`);
+      fetchAllData();
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to update access');
+    }
+  };
+
+  const handleGrantRateAccess = async (userId: number) => {
+    try {
+      await rateAnalysisService.grantAccess({ userId, planId: 1, durationDays: 365 });
+      setSuccess('Rate Analysis access granted successfully!');
+      fetchAllData();
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to grant access');
+    }
+  };
+
+  const handleRevokeRateAccess = async (userId: number) => {
+    if (!window.confirm('Are you sure you want to revoke this user\'s Rate Analysis access?')) return;
+    try {
+      await rateAnalysisService.revokeAccess(userId);
+      setSuccess('Rate Analysis access revoked successfully!');
+      fetchAllData();
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to revoke access');
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'Pending': return '#FF9800';
@@ -272,9 +351,9 @@ const AdminDashboard: React.FC = () => {
       {success && <p style={{ color: 'green', padding: '0.5rem', backgroundColor: '#e8f5e9', borderRadius: '4px' }}>{success}</p>}
 
       <div className="dashboard-tabs">
-        {['overview', 'questions', 'jobs', 'users'].map(tab => (
+        {['overview', 'questions', 'jobs', 'users', 'rateanalysis'].map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab as any)} style={{ padding: '0.5rem 1rem', cursor: 'pointer', backgroundColor: activeTab === tab ? '#1976D2' : '#f5f5f5', color: activeTab === tab ? 'white' : 'black', border: 'none', borderRadius: '4px', textTransform: 'capitalize' }}>
-            {tab}
+            {tab === 'rateanalysis' ? 'Rate Analysis' : tab}
           </button>
         ))}
       </div>
@@ -302,6 +381,13 @@ const AdminDashboard: React.FC = () => {
               <p style={{ fontSize: '2rem', fontWeight: 'bold', margin: '0' }}>{questionSummary.reduce((a, b) => a + b.TotalQuestions, 0)}</p>
               <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.9rem', color: '#666' }}>
                 Active: {questionSummary.reduce((a, b) => a + b.ActiveQuestions, 0)} across {questionSummary.length} domains
+              </p>
+            </div>
+            <div style={{ padding: '1.5rem', backgroundColor: '#f3e5f5', borderRadius: '8px' }}>
+              <h3 style={{ margin: '0 0 0.5rem 0', color: '#7B1FA2' }}>Rate Analysis</h3>
+              <p style={{ fontSize: '2rem', fontWeight: 'bold', margin: '0' }}>{rateSummary?.TotalSubscriptions || 0}</p>
+              <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.9rem', color: '#666' }}>
+                Active: {rateSummary?.ActiveSubscriptions || 0} | Disabled: {rateSummary?.DisabledByAdmin || 0}
               </p>
             </div>
           </div>
@@ -551,6 +637,101 @@ const AdminDashboard: React.FC = () => {
                   </td>
                 </tr>
               ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {activeTab === 'rateanalysis' && (
+        <div>
+          <h2>Rate Analysis Subscription Management</h2>
+
+          {/* Summary Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+            <div style={{ padding: '1.5rem', backgroundColor: '#e3f2fd', borderRadius: '8px' }}>
+              <h3 style={{ margin: '0 0 0.5rem 0', color: '#1565C0' }}>Total Subscribers</h3>
+              <p style={{ fontSize: '2rem', fontWeight: 'bold', margin: '0' }}>{rateSummary?.TotalSubscriptions || 0}</p>
+            </div>
+            <div style={{ padding: '1.5rem', backgroundColor: '#e8f5e9', borderRadius: '8px' }}>
+              <h3 style={{ margin: '0 0 0.5rem 0', color: '#2E7D32' }}>Active</h3>
+              <p style={{ fontSize: '2rem', fontWeight: 'bold', margin: '0' }}>{rateSummary?.ActiveSubscriptions || 0}</p>
+            </div>
+            <div style={{ padding: '1.5rem', backgroundColor: '#fff3e0', borderRadius: '8px' }}>
+              <h3 style={{ margin: '0 0 0.5rem 0', color: '#E65100' }}>Disabled by Admin</h3>
+              <p style={{ fontSize: '2rem', fontWeight: 'bold', margin: '0' }}>{rateSummary?.DisabledByAdmin || 0}</p>
+            </div>
+          </div>
+
+          {/* Filters */}
+          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap', padding: '1rem', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
+            <input type="text" placeholder="Search user name or email..." value={rateFilter.search} onChange={(e) => setRateFilter({ ...rateFilter, search: e.target.value })} style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc', minWidth: '200px', flex: 1 }} />
+            <select value={rateFilter.status} onChange={(e) => setRateFilter({ ...rateFilter, status: e.target.value })} style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc' }}>
+              <option value="">All Status</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="disabled">Disabled by Admin</option>
+            </select>
+            <select value={rateFilter.plan} onChange={(e) => setRateFilter({ ...rateFilter, plan: e.target.value })} style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc' }}>
+              <option value="">All Plans</option>
+              <option value="Free">Free</option>
+              <option value="Professional">Professional</option>
+              <option value="Enterprise">Enterprise</option>
+            </select>
+            {(rateFilter.search || rateFilter.status || rateFilter.plan) && (
+              <button onClick={() => setRateFilter({ search: '', status: '', plan: '' })} style={{ padding: '0.5rem 1rem', backgroundColor: '#757575', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Clear</button>
+            )}
+          </div>
+          <p style={{ marginBottom: '0.5rem', color: '#666', fontSize: '0.9rem' }}>Showing {filteredRateSubscriptions.length} of {rateSubscriptions.length} subscriptions</p>
+
+          {/* Subscriptions Table */}
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ backgroundColor: '#f5f5f5' }}>
+                <th style={{ padding: '0.75rem', textAlign: 'left', borderBottom: '2px solid #ddd' }}>User</th>
+                <th style={{ padding: '0.75rem', textAlign: 'left', borderBottom: '2px solid #ddd' }}>Email</th>
+                <th style={{ padding: '0.75rem', textAlign: 'center', borderBottom: '2px solid #ddd' }}>Plan</th>
+                <th style={{ padding: '0.75rem', textAlign: 'center', borderBottom: '2px solid #ddd' }}>Status</th>
+                <th style={{ padding: '0.75rem', textAlign: 'center', borderBottom: '2px solid #ddd' }}>Subscribed</th>
+                <th style={{ padding: '0.75rem', textAlign: 'center', borderBottom: '2px solid #ddd' }}>Admin Access</th>
+                <th style={{ padding: '0.75rem', textAlign: 'center', borderBottom: '2px solid #ddd' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredRateSubscriptions.map(sub => (
+                <tr key={sub.SubscriptionId}>
+                  <td style={{ padding: '0.75rem', borderBottom: '1px solid #eee' }}>{sub.FirstName} {sub.LastName}</td>
+                  <td style={{ padding: '0.75rem', borderBottom: '1px solid #eee' }}>{sub.Email}</td>
+                  <td style={{ padding: '0.75rem', textAlign: 'center', borderBottom: '1px solid #eee' }}>
+                    <span style={{ padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.8rem', backgroundColor: sub.PlanName === 'Enterprise' ? '#9C27B0' : sub.PlanName === 'Professional' ? '#2196F3' : '#4CAF50', color: 'white' }}>
+                      {sub.PlanName}
+                    </span>
+                  </td>
+                  <td style={{ padding: '0.75rem', textAlign: 'center', borderBottom: '1px solid #eee' }}>
+                    <span style={{ color: sub.IsActive && !sub.DisabledByAdmin ? '#4CAF50' : '#f44336' }}>
+                      {sub.DisabledByAdmin ? 'Disabled' : sub.IsActive ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                  <td style={{ padding: '0.75rem', textAlign: 'center', borderBottom: '1px solid #eee' }}>{new Date(sub.SubscribedDate).toLocaleDateString()}</td>
+                  <td style={{ padding: '0.75rem', textAlign: 'center', borderBottom: '1px solid #eee' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={!sub.DisabledByAdmin} onChange={() => handleRateAccessToggle(sub.SubscriptionId, !sub.DisabledByAdmin)} style={{ cursor: 'pointer', width: '18px', height: '18px' }} />
+                      <span style={{ fontSize: '0.8rem', color: sub.DisabledByAdmin ? '#f44336' : '#4CAF50' }}>{sub.DisabledByAdmin ? 'Disabled' : 'Enabled'}</span>
+                    </label>
+                  </td>
+                  <td style={{ padding: '0.75rem', textAlign: 'center', borderBottom: '1px solid #eee' }}>
+                    {sub.DisabledByAdmin ? (
+                      <button onClick={() => handleGrantRateAccess(sub.SubscriptionId)} style={{ padding: '0.25rem 0.5rem', backgroundColor: '#4CAF50', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Grant Access</button>
+                    ) : (
+                      <button onClick={() => handleRevokeRateAccess(sub.SubscriptionId)} style={{ padding: '0.25rem 0.5rem', backgroundColor: '#f44336', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Revoke Access</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {filteredRateSubscriptions.length === 0 && (
+                <tr>
+                  <td colSpan={7} style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>No subscriptions found</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

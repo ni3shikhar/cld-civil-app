@@ -10,6 +10,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import ProfilePage from './pages/ProfilePage';
+import RateAnalysisPage from './pages/RateAnalysisPage';
 
 // Import components
 import Navigation from './components/Navigation';
@@ -27,6 +28,7 @@ function App() {
             <Route path="/student" element={<StudentDashboard />} />
             <Route path="/employer" element={<EmployerDashboard />} />
             <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/rate-analysis" element={<RateAnalysisPage />} />
             <Route path="/" element={<Navigate to="/login" />} />
           </Routes>
         </div>

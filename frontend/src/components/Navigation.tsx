@@ -72,6 +72,14 @@ const Navigation: React.FC = () => {
               >
                 Dashboard
               </Link>
+              <Link 
+                to="/rate-analysis" 
+                onClick={closeMobileMenu}
+                className="show-mobile"
+                style={{ color: 'white', textDecoration: 'none', padding: '0.5rem 0' }}
+              >
+                📊 Rate Analysis
+              </Link>
               <button 
                 onClick={handleLogout}
                 className="show-mobile"
@@ -154,6 +162,15 @@ const Navigation: React.FC = () => {
                       onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
                     >
                       Dashboard
+                    </Link>
+                    <Link 
+                      to="/rate-analysis" 
+                      onClick={() => setShowDropdown(false)}
+                      style={{ display: 'block', padding: '0.75rem 1rem', color: '#333', textDecoration: 'none', borderBottom: '1px solid #eee' }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                    >
+                      📊 Rate Analysis
                     </Link>
                     <button 
                       onClick={() => { setShowDropdown(false); handleLogout(); }}
