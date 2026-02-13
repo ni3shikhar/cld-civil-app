@@ -29,6 +29,11 @@ on:
         required: false
         default: false
         type: boolean
+      seed_database:
+        description: 'Load seed data into database'
+        required: false
+        default: false
+        type: boolean
 
 env:
   AZURE_SUBSCRIPTION: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
@@ -146,7 +151,7 @@ jobs:
           echo "frontendUrl=$(echo $OUTPUT | jq -r '.properties.outputs.frontendUrl.value')" >> $GITHUB_OUTPUT
           echo "sqlServerFqdn=$(echo $OUTPUT | jq -r '.properties.outputs.sqlServerFqdn.value')" >> $GITHUB_OUTPUT
 
-      - name: Initialize Database
+      - name: Initialize Database Schema
         if: github.event.inputs.deploy_database == 'true'
         env:
           SQL_SERVER_OUTPUT: ${{ steps.deploy.outputs.sqlServerFqdn }}
@@ -162,6 +167,8 @@ jobs:
           fi
           
           echo "SQL Server: $SQL_SERVER"
+          echo "SQL_SERVER=$SQL_SERVER" >> $GITHUB_ENV
+          echo "SQL_SERVER_NAME=$(echo $SQL_SERVER | cut -d'.' -f1)" >> $GITHUB_ENV
           
           if [ -z "$SQL_SERVER" ]; then
             echo "::error::Could not determine SQL Server FQDN"
@@ -194,9 +201,6 @@ jobs:
           # Remove lines 4-10 (DB creation and USE blocks) - connect directly to the database (created by Bicep)
           tail -n +11 database/schema.sql > database/azure-schema.sql
           
-          # Also strip USE statement from seed data (lines 3-4)
-          tail -n +5 database/seed-data.sql > database/azure-seed-data.sql
-          
           # Run schema using SQLCMDPASSWORD env var (avoids shell escaping issues)
           echo "Running schema..."
           /opt/mssql-tools18/bin/sqlcmd \
@@ -205,6 +209,58 @@ jobs:
             -d ContosoCivilApp \
             -i database/azure-schema.sql \
             -C -b
+
+      - name: Seed Database
+        if: github.event.inputs.seed_database == 'true'
+        env:
+          SQL_SERVER_OUTPUT: ${{ steps.deploy.outputs.sqlServerFqdn }}
+          SQLCMDPASSWORD: ${{ secrets.SQL_ADMIN_PASSWORD }}
+          RESOURCE_GROUP: ${{ secrets.RESOURCE_GROUP }}
+        run: |
+          # Get SQL server FQDN - from deploy output, env, or query Azure
+          if [ -n "$SQL_SERVER" ]; then
+            : # Already set from previous step
+          elif [ -n "$SQL_SERVER_OUTPUT" ]; then
+            SQL_SERVER="$SQL_SERVER_OUTPUT"
+          else
+            echo "Querying Azure for SQL server..."
+            SQL_SERVER=$(az sql server list -g "$RESOURCE_GROUP" --query "[0].fullyQualifiedDomainName" -o tsv)
+          fi
+          
+          SQL_SERVER_NAME=$(echo "$SQL_SERVER" | cut -d'.' -f1)
+          echo "SQL Server: $SQL_SERVER"
+          
+          if [ -z "$SQL_SERVER" ]; then
+            echo "::error::Could not determine SQL Server FQDN"
+            exit 1
+          fi
+          
+          # Check if sqlcmd is installed, if not install it
+          if ! command -v /opt/mssql-tools18/bin/sqlcmd &> /dev/null; then
+            echo "Installing sqlcmd..."
+            curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --batch --yes --dearmor -o /usr/share/keyrings/microsoft-prod.gpg
+            echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft-prod.gpg] https://packages.microsoft.com/ubuntu/22.04/prod jammy main" | sudo tee /etc/apt/sources.list.d/mssql-release.list
+            sudo apt-get update
+            sudo ACCEPT_EULA=Y apt-get install -y mssql-tools18 unixodbc-dev
+          fi
+          
+          # Check if firewall rule exists, if not create it
+          if ! az sql server firewall-rule show -g "$RESOURCE_GROUP" -s "$SQL_SERVER_NAME" -n "GitHubRunner-${{ github.run_id }}" &> /dev/null; then
+            RUNNER_IP=$(curl -s https://api.ipify.org)
+            echo "Adding runner IP $RUNNER_IP to SQL firewall..."
+            az sql server firewall-rule create \
+              -g "$RESOURCE_GROUP" \
+              -s "$SQL_SERVER_NAME" \
+              -n "GitHubRunner-${{ github.run_id }}" \
+              --start-ip-address "$RUNNER_IP" \
+              --end-ip-address "$RUNNER_IP"
+          fi
+          
+          # Use default login if not set
+          SQL_LOGIN="${SQL_ADMIN_LOGIN:-sqladmin}"
+          
+          # Strip USE statement from seed data (lines 3-4)
+          tail -n +5 database/seed-data.sql > database/azure-seed-data.sql
           
           # Run seed data
           echo "Running seed data..."
@@ -214,13 +270,27 @@ jobs:
             -d ContosoCivilApp \
             -i database/azure-seed-data.sql \
             -C -b
+
+      - name: Cleanup SQL Firewall Rule
+        if: always() && (github.event.inputs.deploy_database == 'true' || github.event.inputs.seed_database == 'true')
+        env:
+          RESOURCE_GROUP: ${{ secrets.RESOURCE_GROUP }}
+          SQL_SERVER_OUTPUT: ${{ steps.deploy.outputs.sqlServerFqdn }}
+        run: |
+          # Get SQL server name
+          if [ -n "$SQL_SERVER_NAME" ]; then
+            : # Already set
+          elif [ -n "$SQL_SERVER_OUTPUT" ]; then
+            SQL_SERVER_NAME=$(echo "$SQL_SERVER_OUTPUT" | cut -d'.' -f1)
+          else
+            SQL_SERVER_NAME=$(az sql server list -g "$RESOURCE_GROUP" --query "[0].name" -o tsv)
+          fi
           
-          # Clean up firewall rule
           echo "Removing runner IP from SQL firewall..."
           az sql server firewall-rule delete \
             -g "$RESOURCE_GROUP" \
             -s "$SQL_SERVER_NAME" \
-            -n "GitHubRunner-${{ github.run_id }}"
+            -n "GitHubRunner-${{ github.run_id }}" || true
 
   deploy-containers:
     name: Build & Deploy Container Apps
