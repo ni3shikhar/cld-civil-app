@@ -265,13 +265,13 @@ const AdminDashboard: React.FC = () => {
   if (loading) return <div style={{ padding: '2rem' }}>Loading...</div>;
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
+    <div className="dashboard-container" style={{ maxWidth: '1400px', margin: '0 auto' }}>
       <h1>Administrator Dashboard</h1>
       
       {error && <p style={{ color: 'red', padding: '0.5rem', backgroundColor: '#ffebee', borderRadius: '4px' }}>{error}</p>}
       {success && <p style={{ color: 'green', padding: '0.5rem', backgroundColor: '#e8f5e9', borderRadius: '4px' }}>{success}</p>}
 
-      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', borderBottom: '2px solid #eee', paddingBottom: '0.5rem', flexWrap: 'wrap' }}>
+      <div className="dashboard-tabs">
         {['overview', 'questions', 'jobs', 'users'].map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab as any)} style={{ padding: '0.5rem 1rem', cursor: 'pointer', backgroundColor: activeTab === tab ? '#1976D2' : '#f5f5f5', color: activeTab === tab ? 'white' : 'black', border: 'none', borderRadius: '4px', textTransform: 'capitalize' }}>
             {tab}

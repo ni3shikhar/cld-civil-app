@@ -184,11 +184,11 @@ const StudentDashboard: React.FC = () => {
   };
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
+    <div className="dashboard-container" style={{ maxWidth: '1200px', margin: '0 auto' }}>
       <h1 style={{ marginBottom: '1rem' }}>Student Dashboard</h1>
       
       {/* Tab Navigation */}
-      <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', borderBottom: '2px solid #eee', paddingBottom: '1rem' }}>
+      <div className="dashboard-tabs">
         <button 
           onClick={() => setActiveTab('jobs')}
           style={{ 
@@ -237,17 +237,19 @@ const StudentDashboard: React.FC = () => {
       {activeTab === 'jobs' && (
         <div>
           {/* Jobs Filter */}
-          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap', padding: '1rem', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
+          <div className="filter-section">
             <input 
               type="text" 
               placeholder="Search jobs, companies, skills..." 
               value={jobFilter.search} 
               onChange={(e) => setJobFilter({ ...jobFilter, search: e.target.value })} 
-              style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc', minWidth: '200px', flex: 1 }} 
+              className="filter-input"
+              style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc' }} 
             />
             <select 
               value={jobFilter.domain} 
               onChange={(e) => setJobFilter({ ...jobFilter, domain: e.target.value })} 
+              className="filter-select"
               style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc' }}
             >
               <option value="">All Domains</option>
@@ -256,6 +258,7 @@ const StudentDashboard: React.FC = () => {
             <select 
               value={jobFilter.jobType} 
               onChange={(e) => setJobFilter({ ...jobFilter, jobType: e.target.value })} 
+              className="filter-select"
               style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc' }}
             >
               <option value="">All Job Types</option>
@@ -264,6 +267,7 @@ const StudentDashboard: React.FC = () => {
             <select 
               value={jobFilter.location} 
               onChange={(e) => setJobFilter({ ...jobFilter, location: e.target.value })} 
+              className="filter-select"
               style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc' }}
             >
               <option value="">All Locations</option>

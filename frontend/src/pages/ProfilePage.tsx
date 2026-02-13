@@ -346,7 +346,7 @@ const ProfilePage: React.FC = () => {
   }
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto' }}>
+    <div className="dashboard-container" style={{ maxWidth: '800px', margin: '0 auto' }}>
       <h1>My Profile</h1>
       
       {error && (

@@ -121,13 +121,13 @@ const EmployerDashboard: React.FC = () => {
   if (loading) return <div style={{ padding: '2rem' }}>Loading...</div>;
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
+    <div className="dashboard-container" style={{ maxWidth: '1200px', margin: '0 auto' }}>
       <h1>Employer Dashboard</h1>
       
       {error && <p style={{ color: 'red', padding: '0.5rem', backgroundColor: '#ffebee', borderRadius: '4px' }}>{error}</p>}
       {success && <p style={{ color: 'green', padding: '0.5rem', backgroundColor: '#e8f5e9', borderRadius: '4px' }}>{success}</p>}
 
-      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', borderBottom: '2px solid #eee', paddingBottom: '0.5rem' }}>
+      <div className="dashboard-tabs">
         <button onClick={() => setActiveTab('jobs')} style={{ padding: '0.5rem 1rem', cursor: 'pointer', backgroundColor: activeTab === 'jobs' ? '#1976D2' : '#f5f5f5', color: activeTab === 'jobs' ? 'white' : 'black', border: 'none', borderRadius: '4px' }}>
           My Jobs ({jobs.length})
         </button>

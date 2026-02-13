@@ -77,13 +77,13 @@ const RegisterPage: React.FC = () => {
   const labelStyle = { display: 'block', marginBottom: '0.25rem', fontWeight: 500, color: '#333' };
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '500px', margin: '0 auto' }}>
+    <div className="register-container">
       <h1 style={{ marginBottom: '1.5rem', color: '#1976D2' }}>Create Account</h1>
       {error && <div style={{ color: '#c62828', padding: '0.75rem', backgroundColor: '#ffebee', borderRadius: '6px', marginBottom: '1rem' }}>{error}</div>}
       {success && <div style={{ color: '#2e7d32', padding: '0.75rem', backgroundColor: '#e8f5e9', borderRadius: '6px', marginBottom: '1rem' }}>{success}</div>}
       
       <form onSubmit={handleRegister}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+        <div className="register-form-grid" style={{ marginBottom: '1rem' }}>
           <div>
             <label style={labelStyle}>First Name *</label>
             <input

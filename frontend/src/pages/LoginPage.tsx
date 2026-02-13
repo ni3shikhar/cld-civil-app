@@ -101,21 +101,9 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <div style={{ 
-      display: 'flex', 
-      minHeight: '100vh',
-      backgroundColor: '#f5f5f5'
-    }}>
+    <div className="login-container">
       {/* Left Side - Login Form */}
-      <div style={{ 
-        flex: '0 0 450px', 
-        padding: '3rem',
-        backgroundColor: '#ffffff',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        boxShadow: '2px 0 10px rgba(0,0,0,0.1)'
-      }}>
+      <div className="login-form-section">
         <div style={{ maxWidth: '350px', margin: '0 auto', width: '100%' }}>
           <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
             <h1 style={{ 
@@ -232,13 +220,8 @@ const LoginPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Right Side - Industry News */}
-      <div style={{ 
-        flex: 1, 
-        padding: '2rem 3rem',
-        overflowY: 'auto',
-        background: 'linear-gradient(135deg, #1565C0 0%, #0D47A1 100%)'
-      }}>
+      {/* Right Side - Industry News (hidden on mobile via CSS) */}
+      <div className="login-news-section">
         <div style={{ maxWidth: '700px' }}>
           <h2 style={{ 
             color: '#ffffff', 
