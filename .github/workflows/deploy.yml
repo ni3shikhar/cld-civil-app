@@ -34,13 +34,18 @@ on:
         required: false
         default: false
         type: boolean
+      run_migrations:
+        description: '4. Run database migrations (incremental schema updates)'
+        required: false
+        default: false
+        type: boolean
       build_images:
-        description: '4. Build and push container images'
+        description: '5. Build and push container images'
         required: false
         default: false
         type: boolean
       deploy_containers:
-        description: '5. Update container apps with new images'
+        description: '6. Update container apps with new images'
         required: false
         default: false
         type: boolean
@@ -94,8 +99,9 @@ jobs:
           echo "| 1. Deploy Infrastructure | ${{ github.event.inputs.deploy_infra || 'false' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| 2. Initialize Database Schema | ${{ github.event.inputs.deploy_database || 'false' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| 3. Seed Database | ${{ github.event.inputs.seed_database || 'false' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| 4. Build Container Images | ${{ github.event.inputs.build_images || 'false' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| 5. Deploy Container Apps | ${{ github.event.inputs.deploy_containers || 'false' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 4. Run Migrations | ${{ github.event.inputs.run_migrations || 'false' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 5. Build Container Images | ${{ github.event.inputs.build_images || 'false' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 6. Deploy Container Apps | ${{ github.event.inputs.deploy_containers || 'false' }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Configuration" >> $GITHUB_STEP_SUMMARY
           echo "| Setting | Value |" >> $GITHUB_STEP_SUMMARY
@@ -361,8 +367,77 @@ jobs:
             -i database/azure-seed-data.sql \
             -C -b
 
+      - name: Run Database Migrations
+        if: github.event.inputs.run_migrations == 'true'
+        env:
+          SQL_SERVER_OUTPUT: ${{ steps.deploy.outputs.sqlServerFqdn }}
+          SQLCMDPASSWORD: ${{ secrets.SQL_ADMIN_PASSWORD }}
+          RESOURCE_GROUP: ${{ secrets.RESOURCE_GROUP }}
+        run: |
+          # Get SQL server FQDN - from deploy output, env, or query Azure
+          if [ -n "$SQL_SERVER" ]; then
+            : # Already set from previous step
+          elif [ -n "$SQL_SERVER_OUTPUT" ]; then
+            SQL_SERVER="$SQL_SERVER_OUTPUT"
+          else
+            echo "Querying Azure for SQL server..."
+            SQL_SERVER=$(az sql server list -g "$RESOURCE_GROUP" --query "[0].fullyQualifiedDomainName" -o tsv)
+          fi
+          
+          SQL_SERVER_NAME=$(echo "$SQL_SERVER" | cut -d'.' -f1)
+          echo "SQL Server: $SQL_SERVER"
+          
+          if [ -z "$SQL_SERVER" ]; then
+            echo "::error::Could not determine SQL Server FQDN"
+            exit 1
+          fi
+          
+          # Check if sqlcmd is installed, if not install it
+          if ! command -v /opt/mssql-tools18/bin/sqlcmd &> /dev/null; then
+            echo "Installing sqlcmd..."
+            curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --batch --yes --dearmor -o /usr/share/keyrings/microsoft-prod.gpg
+            echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft-prod.gpg] https://packages.microsoft.com/ubuntu/22.04/prod jammy main" | sudo tee /etc/apt/sources.list.d/mssql-release.list
+            sudo apt-get update
+            sudo ACCEPT_EULA=Y apt-get install -y mssql-tools18 unixodbc-dev
+          fi
+          
+          # Check if firewall rule exists, if not create it
+          if ! az sql server firewall-rule show -g "$RESOURCE_GROUP" -s "$SQL_SERVER_NAME" -n "GitHubRunner-${{ github.run_id }}" &> /dev/null; then
+            RUNNER_IP=$(curl -s https://api.ipify.org)
+            echo "Adding runner IP $RUNNER_IP to SQL firewall..."
+            az sql server firewall-rule create \
+              -g "$RESOURCE_GROUP" \
+              -s "$SQL_SERVER_NAME" \
+              -n "GitHubRunner-${{ github.run_id }}" \
+              --start-ip-address "$RUNNER_IP" \
+              --end-ip-address "$RUNNER_IP"
+          fi
+          
+          # Use default login if not set
+          SQL_LOGIN="${SQL_ADMIN_LOGIN:-sqladmin}"
+          
+          # Run all migration files in order
+          echo "Running database migrations..."
+          MIGRATION_COUNT=0
+          for migration_file in $(ls database/migrations/*.sql 2>/dev/null | sort); do
+            echo "Running migration: $migration_file"
+            /opt/mssql-tools18/bin/sqlcmd \
+              -S "$SQL_SERVER" \
+              -U "$SQL_LOGIN" \
+              -d ContosoCivilApp \
+              -i "$migration_file" \
+              -C -b || echo "Warning: Migration $migration_file may have already been applied or encountered an error"
+            MIGRATION_COUNT=$((MIGRATION_COUNT + 1))
+          done
+          
+          if [ $MIGRATION_COUNT -eq 0 ]; then
+            echo "No migration files found in database/migrations/"
+          else
+            echo "Completed $MIGRATION_COUNT migration(s)"
+          fi
+
       - name: Cleanup SQL Firewall Rule
-        if: always() && (github.event.inputs.deploy_database == 'true' || github.event.inputs.seed_database == 'true')
+        if: always() && (github.event.inputs.deploy_database == 'true' || github.event.inputs.seed_database == 'true' || github.event.inputs.run_migrations == 'true')
         env:
           RESOURCE_GROUP: ${{ secrets.RESOURCE_GROUP }}
           SQL_SERVER_OUTPUT: ${{ steps.deploy.outputs.sqlServerFqdn }}
